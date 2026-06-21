@@ -10,7 +10,7 @@ export const authenticateToken = (req: Request, res: Response, next: NextFunctio
     return;
   }
 
-  jwt.verify(token, process.env.JWT_SECRET || 'secret', (err: any, user: any) => {
+  jwt.verify(token, process.env.JWT_SECRET || 'super_secret_key_change_this_later', (err: any, user: any) => {
     if (err) {
       res.status(403).json({ message: 'Invalid token' });
       return;

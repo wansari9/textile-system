@@ -45,7 +45,7 @@ router.post('/', async (req: Request, res: Response) => {
   try {
     const result = await pool.query(
       `INSERT INTO branches (branch_name, is_main)
-       VALUES ($1, COALESCE($2, 0))
+       VALUES ($1,        COALESCE($2, 0))
        RETURNING branch_id, branch_name, is_main, is_active, created_at`,
       [branch_name, is_main ?? null]
     );
@@ -166,10 +166,15 @@ router.get('/:id/daily', async (req: Request, res: Response) => {
 // GET /api/branches/:id/summary  (target vs actual vs difference, from vw_branch_daily_summary)
 router.get('/:id/summary', async (req: Request, res: Response) => {
   try {
-    const result = await pool.query(
-      `SELECT * FROM vw_branch_daily_summary WHERE branch_id = $1 ORDER BY production_date DESC`,
-      [req.params.id]
-    );
+    const { date } = req.query;
+    let query = `SELECT * FROM vw_branch_daily_summary WHERE branch_id = $1`;
+    const params: any[] = [req.params.id];
+    if (date) {
+      query += ` AND production_date = $2`;
+      params.push(date);
+    }
+    query += ` ORDER BY production_date DESC`;
+    const result = await pool.query(query, params);
     res.json({ success: true, data: result.rows });
   } catch (error: any) {
     console.error('Get branch summary error:', error);

@@ -1,59 +1,449 @@
-import React from 'react';
-import LineCard from '../../components/LineCard';
+import { useState, useEffect } from 'react';
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
+  LineChart, Line, PieChart, Pie, Cell,
+} from 'recharts';
+import { getLines, getLineCurrent } from '../../api/lines';
+import { getDailyReport } from '../../api/reports';
+import { getQuality } from '../../api/quality';
+import { getStagesSummary } from '../../api/stages';
+import { getHourlyProduction } from '../../api/production';
+import { getBranches, getBranchSummary } from '../../api/branches';
+import { Badge } from '../../components/ui';
+import Card from '../../components/ui/Card';
+import { SkeletonCard } from '../../components/ui/Skeleton';
+import {
+  TrendingUp, Target, Activity, LayoutDashboard, RefreshCw,
+} from 'lucide-react';
+
+const COLORS = ['#6366f1', '#22c55e', '#f59e0b', '#ef4444', '#3b82f6', '#8b5cf6', '#ec4899', '#14b8a6'];
+
+const stagesName: Record<string, string> = { CUTTING: 'Cutting', PACKING: 'Packing', IRONING: 'Ironing' };
 
 export default function Dashboard() {
-  const dummyLines = [
-    { id: 1, lineName: 'Line 1', productName: 'T-Shirt Model A', customerName: 'Zara', actual: 450, target: 500, defects: 5, status: 'ACTIVE' as const },
-    { id: 2, lineName: 'Line 2', productName: 'Jeans Blue', customerName: 'H&M', actual: 300, target: 400, defects: 12, status: 'ACTIVE' as const },
-    { id: 3, lineName: 'Line 3', productName: 'Jacket X', customerName: 'Levis', actual: 0, target: 0, defects: 0, status: 'MAINTENANCE' as const },
-  ];
+  const [lines, setLines] = useState<any[]>([]);
+  const [summary, setSummary] = useState<any>(null);
+  const [qualityData, setQualityData] = useState<any[]>([]);
+  const [stagesData, setStagesData] = useState<any[]>([]);
+  const [branchesData, setBranchesData] = useState<any[]>([]);
+  const [hourlyData, setHourlyData] = useState<any[]>([]);
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchData = async (date: string) => {
+    setLoading(true);
+    const [reportRes, linesRes, qualityRes, stagesRes, hourlyRes] = await Promise.all([
+      getDailyReport(date),
+      getLines(),
+      getQuality({ date }),
+      getStagesSummary({ date }),
+      getHourlyProduction(date),
+    ]);
+    if (qualityRes.success) setQualityData(qualityRes.data);
+    if (stagesRes.success) setStagesData(stagesRes.data);
+    if (hourlyRes.success) {
+      const grouped: Record<number, number> = {};
+      for (const r of hourlyRes.data || []) {
+        grouped[r.hour_number] = (grouped[r.hour_number] || 0) + (r.qty_produced || 0);
+      }
+      setHourlyData(
+        Array.from({ length: 12 }, (_, i) => ({
+          hour: `H${i + 1}`,
+          produced: grouped[i + 1] || 0,
+        }))
+      );
+    }
+    if (reportRes.success) setSummary(reportRes.data);
+    if (!linesRes.success) { setLoading(false); return; }
+
+    const byLine = (reportRes.data?.by_line || []) as any[];
+
+    const enriched = await Promise.all(
+      linesRes.data.map(async (line: any) => {
+        const lineSummary = byLine.find((l: any) => l.line_id === line.line_id);
+        try {
+          const current = await getLineCurrent(line.line_id);
+          const assign = current.data;
+          return {
+            id: line.line_id,
+            name: line.line_name,
+            product: assign.product_name,
+            customer: assign.customer_name,
+            produced: lineSummary?.total_produced ?? 0,
+            target: assign.daily_target,
+            defects: lineSummary?.total_defect ?? 0,
+            status: line.status,
+          };
+        } catch {
+          return {
+            id: line.line_id,
+            name: line.line_name,
+            product: 'No active assignment',
+            customer: '-',
+            produced: lineSummary?.total_produced ?? 0,
+            target: 0,
+            defects: 0,
+            status: line.status,
+          };
+        }
+      })
+    );
+    setLines(enriched);
+
+    const branchesRes = await getBranches();
+    if (branchesRes.success) {
+      const summaries = await Promise.all(
+        branchesRes.data.map(async (branch: any) => {
+          try {
+            const s = await getBranchSummary(branch.branch_id);
+            const latest = s.data?.[0];
+            return {
+              branch: branch.branch_name,
+              target: latest?.daily_target ?? 0,
+              actual: latest?.qty_produced ?? 0,
+              diff: (latest?.qty_produced ?? 0) - (latest?.daily_target ?? 0),
+            };
+          } catch {
+            return { branch: branch.branch_name, target: 0, actual: 0, diff: 0 };
+          }
+        })
+      );
+      setBranchesData(summaries);
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    fetchData(selectedDate);
+  }, [selectedDate]);
+
+  const totalProduced = summary?.total?.total_produced ?? 0;
+  const totalTarget = summary?.total?.total_target ?? 0;
+  const efficiency = totalTarget > 0 ? Math.round((totalProduced / totalTarget) * 100) : 0;
+  const activeLines = lines.filter(l => l.status === 'ACTIVE').length;
+
+  const stagesSummary = (stage: string) => {
+    const items = stagesData.filter((s: any) => s.stage === stage);
+    return items.reduce((sum: number, s: any) => sum + (s.qty_completed || 0), 0);
+  };
+
+  const barData = lines.filter(l => l.target > 0).slice(0, 20);
+
+  const qualityPie = qualityData.map((q: any, i: number) => ({
+    name: q.customer_name,
+    value: q.pcs_checked || 0,
+    color: COLORS[i % COLORS.length],
+  }));
+
+  const stagesChartData = ['CUTTING', 'PACKING', 'IRONING'].map(s => ({
+    name: stagesName[s],
+    completed: stagesSummary(s),
+  }));
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex justify-between items-end">
+    <div className="p-4 lg:p-6 space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-3xl font-bold text-gray-800">Admin Dashboard</h1>
-          <p className="text-gray-600 mt-1">Live production tracking for {new Date().toLocaleDateString()}</p>
+          <h1 className="text-2xl lg:text-3xl font-bold text-text-primary">Dashboard</h1>
+          <p className="text-sm text-text-muted mt-1">
+            Production overview for <span className="font-medium text-text-secondary">{new Date(selectedDate).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
+          </p>
         </div>
-        <button className="bg-white border rounded shadow-sm px-4 py-2 text-sm font-medium hover:bg-gray-50">
-          Manual Refresh
-        </button>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
-          <p className="text-sm text-gray-500 font-medium">Total Produced</p>
-          <p className="text-2xl font-bold text-gray-800">750</p>
-        </div>
-        <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
-          <p className="text-sm text-gray-500 font-medium">Total Target</p>
-          <p className="text-2xl font-bold text-gray-800">900</p>
-        </div>
-        <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
-          <p className="text-sm text-gray-500 font-medium">Factory Efficiency</p>
-          <p className="text-2xl font-bold text-green-600">83%</p>
-        </div>
-        <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
-          <p className="text-sm text-gray-500 font-medium">Active Lines</p>
-          <p className="text-2xl font-bold text-blue-600">2 / 3</p>
+        <div className="flex items-center gap-2">
+          <input type="date" className="px-3 py-2 border border-border rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/40"
+            value={selectedDate}
+            onChange={e => setSelectedDate(e.target.value)} />
+          <button onClick={() => fetchData(selectedDate)} className="p-2 text-gray-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-colors">
+            <RefreshCw size={18} />
+          </button>
         </div>
       </div>
 
-      <h2 className="text-xl font-semibold text-gray-800 border-b pb-2">Production Lines</h2>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {dummyLines.map(line => (
-          <LineCard 
-            key={line.id}
-            lineName={line.lineName}
-            productName={line.productName}
-            customerName={line.customerName}
-            actual={line.actual}
-            target={line.target}
-            defects={line.defects}
-            status={line.status}
-          />
-        ))}
+      {/* KPI Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card className="relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-brand-50 rounded-bl-3xl -mr-6 -mt-6" />
+          <div className="relative z-10">
+            <div className="flex items-center gap-2 text-sm text-text-muted mb-1">
+              <TrendingUp size={16} className="text-brand-500" />
+              <span>Total Produced</span>
+            </div>
+            <p className="text-3xl font-bold text-text-primary">{totalProduced.toLocaleString()}</p>
+          </div>
+        </Card>
+        <Card className="relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-success-50 rounded-bl-3xl -mr-6 -mt-6" />
+          <div className="relative z-10">
+            <div className="flex items-center gap-2 text-sm text-text-muted mb-1">
+              <Target size={16} className="text-success-600" />
+              <span>Total Target</span>
+            </div>
+            <p className="text-3xl font-bold text-text-primary">{totalTarget.toLocaleString()}</p>
+          </div>
+        </Card>
+        <Card className="relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-warning-50 rounded-bl-3xl -mr-6 -mt-6" />
+          <div className="relative z-10">
+            <div className="flex items-center gap-2 text-sm text-text-muted mb-1">
+              <Activity size={16} className="text-warning-600" />
+              <span>Efficiency Rate</span>
+            </div>
+            <p className={`text-3xl font-bold ${efficiency >= 90 ? 'text-success-600' : efficiency >= 70 ? 'text-warning-600' : 'text-danger-600'}`}>
+              {efficiency}%
+            </p>
+          </div>
+        </Card>
+        <Card className="relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-info-50 rounded-bl-3xl -mr-6 -mt-6" />
+          <div className="relative z-10">
+            <div className="flex items-center gap-2 text-sm text-text-muted mb-1">
+              <LayoutDashboard size={16} className="text-info-600" />
+              <span>Active Lines</span>
+            </div>
+            <p className="text-3xl font-bold text-text-primary">{activeLines}<span className="text-lg text-text-muted font-normal"> / {lines.length}</span></p>
+          </div>
+        </Card>
       </div>
+
+      {loading ? (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <SkeletonCard /><SkeletonCard />
+        </div>
+      ) : (
+        <>
+          {/* Charts Row */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Production by Line */}
+            <Card header={<h3 className="font-semibold text-text-primary">Production by Line</h3>}>
+              {barData.length === 0 ? (
+                <p className="text-sm text-text-muted text-center py-8">No production data for this date.</p>
+              ) : (
+                <div className="h-72">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={barData} margin={{ top: 8, right: 8, bottom: 0, left: -8 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                      <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                      <YAxis tick={{ fontSize: 12 }} />
+                      <Tooltip
+                        contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.08)' }}
+                      />
+                      <Legend />
+                      <Bar dataKey="produced" name="Produced" fill="#6366f1" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="target" name="Target" fill="#c7d2fe" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+            </Card>
+
+            {/* Hourly Trend */}
+            <Card header={<h3 className="font-semibold text-text-primary">Hourly Production Trend</h3>}>
+              {hourlyData.every(d => d.produced === 0) ? (
+                <p className="text-sm text-text-muted text-center py-8">No hourly data for this date.</p>
+              ) : (
+                <div className="h-72">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={hourlyData} margin={{ top: 8, right: 8, bottom: 0, left: -8 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                      <XAxis dataKey="hour" tick={{ fontSize: 12 }} />
+                      <YAxis tick={{ fontSize: 12 }} />
+                      <Tooltip
+                        contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.08)' }}
+                      />
+                      <Line type="monotone" dataKey="produced" stroke="#6366f1" strokeWidth={2} dot={{ fill: '#6366f1', r: 3 }} activeDot={{ r: 5 }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+            </Card>
+          </div>
+
+          {/* Second row */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Process Stages */}
+            <Card header={<h3 className="font-semibold text-text-primary">Process Stages</h3>}>
+              {stagesChartData.every(d => d.completed === 0) ? (
+                <p className="text-sm text-text-muted text-center py-8">No stage data.</p>
+              ) : (
+                <div className="h-56">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={stagesChartData} layout="vertical" margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" horizontal={false} />
+                      <XAxis type="number" tick={{ fontSize: 12 }} />
+                      <YAxis type="category" dataKey="name" tick={{ fontSize: 12 }} width={80} />
+                      <Tooltip
+                        contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0' }}
+                      />
+                      <Bar dataKey="completed" name="Completed" fill="#6366f1" radius={[0, 4, 4, 0]} barSize={24} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+            </Card>
+
+            {/* Quality Overview */}
+            <Card header={<h3 className="font-semibold text-text-primary">Quality Overview</h3>}>
+              {qualityPie.length === 0 ? (
+                <p className="text-sm text-text-muted text-center py-8">No quality data.</p>
+              ) : (
+                <div className="h-56 flex items-center justify-center">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie data={qualityPie} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={2} dataKey="value">
+                        {qualityPie.map((entry, i) => (
+                          <Cell key={i} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0' }}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+              {qualityPie.length > 0 && (
+                <div className="flex flex-wrap gap-3 mt-2 justify-center">
+                  {qualityPie.map((q, i) => (
+                    <div key={i} className="flex items-center gap-1.5 text-xs text-text-secondary">
+                      <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: q.color }} />
+                      {q.name}: {q.value.toLocaleString()}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Card>
+          </div>
+
+          {/* Branch Summary */}
+          <Card header={
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-text-primary">Branch Summary</h3>
+              <Badge variant="info" size="sm">{branchesData.length} branches</Badge>
+            </div>
+          }>
+            {branchesData.length === 0 ? (
+              <p className="text-sm text-text-muted text-center py-4">No branch data.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border text-left text-xs text-text-muted uppercase tracking-wider">
+                      <th className="pb-2 pr-4 font-medium">Branch</th>
+                      <th className="pb-2 pr-4 font-medium text-right">Target</th>
+                      <th className="pb-2 pr-4 font-medium text-right">Produced</th>
+                      <th className="pb-2 font-medium text-right">Difference</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {branchesData.map((b: any) => (
+                      <tr key={b.branch} className="hover:bg-gray-50 transition-colors">
+                        <td className="py-2.5 pr-4 font-medium text-text-primary">{b.branch}</td>
+                        <td className="py-2.5 pr-4 text-right text-text-secondary">{b.target.toLocaleString()}</td>
+                        <td className="py-2.5 pr-4 text-right text-text-secondary">{b.actual.toLocaleString()}</td>
+                        <td className={`py-2.5 text-right font-medium ${b.diff < 0 ? 'text-danger-600' : 'text-success-600'}`}>
+                          {b.diff > 0 ? '+' : ''}{b.diff.toLocaleString()}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
+
+          {/* Production Lines */}
+          <Card header={
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-text-primary">Production Lines</h3>
+              <Badge variant="success" size="sm">{activeLines} active</Badge>
+            </div>
+          } padding="none">
+            {lines.length === 0 ? (
+              <p className="text-sm text-text-muted text-center py-8">No lines configured.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border text-left text-xs text-text-muted uppercase tracking-wider bg-gray-50/50">
+                      <th className="px-5 py-3 font-medium">Line</th>
+                      <th className="px-5 py-3 font-medium">Product / Customer</th>
+                      <th className="px-5 py-3 font-medium text-right">Produced</th>
+                      <th className="px-5 py-3 font-medium text-right">Target</th>
+                      <th className="px-5 py-3 font-medium text-right">%</th>
+                      <th className="px-5 py-3 font-medium text-right">Defects</th>
+                      <th className="px-5 py-3 font-medium text-right">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {lines.map(line => {
+                      const pct = line.target > 0 ? Math.round((line.produced / line.target) * 100) : 0;
+                      return (
+                        <tr key={line.id} className="hover:bg-gray-50 transition-colors">
+                          <td className="px-5 py-3 font-medium text-text-primary">{line.name}</td>
+                          <td className="px-5 py-3 text-text-secondary">
+                            <span className="block truncate max-w-40">{line.product}</span>
+                            <span className="text-xs text-text-muted">{line.customer}</span>
+                          </td>
+                          <td className="px-5 py-3 text-right font-medium">{line.produced.toLocaleString()}</td>
+                          <td className="px-5 py-3 text-right text-text-secondary">{line.target.toLocaleString()}</td>
+                          <td className="px-5 py-3 text-right">
+                            <span className={`font-medium ${pct >= 90 ? 'text-success-600' : pct >= 70 ? 'text-warning-600' : 'text-danger-600'}`}>
+                              {pct}%
+                            </span>
+                          </td>
+                          <td className="px-5 py-3 text-right text-text-secondary">{line.defects}</td>
+                          <td className="px-5 py-3 text-right">
+                            <Badge variant={line.status === 'ACTIVE' ? 'success' : line.status === 'MAINTENANCE' ? 'warning' : 'default'} size="sm">
+                              {line.status}
+                            </Badge>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
+
+          {/* Quality Table */}
+          {qualityData.length > 0 && (
+            <Card header={<h3 className="font-semibold text-text-primary">Quality Control Details</h3>} padding="none">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border text-left text-xs text-text-muted uppercase tracking-wider bg-gray-50/50">
+                      <th className="px-5 py-3 font-medium">Customer</th>
+                      <th className="px-5 py-3 font-medium text-right">Checked</th>
+                      <th className="px-5 py-3 font-medium text-right">Faults</th>
+                      <th className="px-5 py-3 font-medium text-right">Passed</th>
+                      <th className="px-5 py-3 font-medium text-right">Pass Rate</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {qualityData.map((q: any) => {
+                      const ok = q.pcs_checked - q.pcs_faults;
+                      const rate = q.pcs_checked > 0 ? ((ok / q.pcs_checked) * 100).toFixed(1) : '0';
+                      return (
+                        <tr key={q.check_id || q.customer_id} className="hover:bg-gray-50 transition-colors">
+                          <td className="px-5 py-3 font-medium text-text-primary">{q.customer_name}</td>
+                          <td className="px-5 py-3 text-right">{q.pcs_checked.toLocaleString()}</td>
+                          <td className="px-5 py-3 text-right text-danger-600 font-medium">{q.pcs_faults}</td>
+                          <td className="px-5 py-3 text-right">{ok.toLocaleString()}</td>
+                          <td className="px-5 py-3 text-right">
+                            <Badge variant={Number(rate) >= 95 ? 'success' : Number(rate) >= 80 ? 'warning' : 'danger'}>{rate}%</Badge>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          )}
+        </>
+      )}
     </div>
   );
 }

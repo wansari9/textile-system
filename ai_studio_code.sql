@@ -194,7 +194,9 @@ SELECT
     SUM(total_produced) AS total_produced,
     SUM(total_defect) AS total_defect,
     SUM(daily_target) AS total_assigned_target,
-    COUNT(DISTINCT line_id) AS active_lines
+    SUM(daily_target) AS total_target,
+    COUNT(DISTINCT line_id) AS active_lines,
+    ROUND((SUM(total_produced)::NUMERIC / NULLIF(SUM(daily_target), 0)) * 100, 1) AS efficiency_pct
 FROM vw_daily_line_summary
 GROUP BY production_date;
 

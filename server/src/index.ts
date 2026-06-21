@@ -2,9 +2,9 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import pool from './config/db';
+import { authenticateToken } from './middleware/auth';
 
-// Controllers / Routes
-import productionRoutes from './routes/productionRoutes';
+import productionRoutes from './routes/production';
 import authRoutes from './routes/auth';
 import customerRoutes from './routes/customers';
 import productRoutes from './routes/products';
@@ -24,7 +24,6 @@ const PORT = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json());
 
-// A simple test route
 app.get('/api/test-db', async (req, res) => {
   try {
     const result = await pool.query('SELECT NOW() as current_time');
@@ -34,18 +33,17 @@ app.get('/api/test-db', async (req, res) => {
   }
 });
 
-// Mount Routes
-app.use('/api/production', productionRoutes);
 app.use('/api/auth', authRoutes);
-app.use('/api/customers', customerRoutes);
-app.use('/api/products', productRoutes);
-app.use('/api/lines', lineRoutes);
-app.use('/api/workforce', workforceRoutes);
-app.use('/api/branches', branchRoutes);
-app.use('/api/stages', stageRoutes);
-app.use('/api/quality', qualityRoutes);
-app.use('/api/reports', reportRoutes);
-app.use('/api/users', userRoutes);
+app.use('/api/production', authenticateToken, productionRoutes);
+app.use('/api/customers', authenticateToken, customerRoutes);
+app.use('/api/products', authenticateToken, productRoutes);
+app.use('/api/lines', authenticateToken, lineRoutes);
+app.use('/api/workforce', authenticateToken, workforceRoutes);
+app.use('/api/branches', authenticateToken, branchRoutes);
+app.use('/api/stages', authenticateToken, stageRoutes);
+app.use('/api/quality', authenticateToken, qualityRoutes);
+app.use('/api/reports', authenticateToken, reportRoutes);
+app.use('/api/users', authenticateToken, userRoutes);
 
 app.listen(PORT, () => {
   console.log(`🚀 Server is running on http://localhost:${PORT}`);

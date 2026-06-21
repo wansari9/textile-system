@@ -4,9 +4,8 @@ import pool from '../config/db';
 const router = Router();
 
 // POST /api/workforce  (upsert today's headcount for a line — one row per line per day)
-// ON CONFLICT makes this a single atomic statement, no transaction needed.
 router.post('/', async (req: Request, res: Response) => {
-  const { line_id, production_date, workers_required, workers_present, recorded_by } = req.body;
+  const { line_id, production_date, workers_required, workers_present, notes, recorded_by } = req.body;
 
   if (!line_id || !production_date || workers_present === undefined) {
     return res.status(400).json({
@@ -17,17 +16,17 @@ router.post('/', async (req: Request, res: Response) => {
 
   try {
     const result = await pool.query(
-      `INSERT INTO daily_workforce (line_id, production_date, workers_required, workers_present, recorded_by)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO daily_workforce (line_id, production_date, workers_required, workers_present, notes, recorded_by)
+       VALUES ($1, $2, $3, $4, $5, $6)
        ON CONFLICT (line_id, production_date)
        DO UPDATE SET
          workers_required = EXCLUDED.workers_required,
          workers_present  = EXCLUDED.workers_present,
+         notes            = EXCLUDED.notes,
          recorded_by      = EXCLUDED.recorded_by,
          recorded_at       = CURRENT_TIMESTAMP
-       RETURNING record_id, line_id, production_date, workers_required, workers_present, recorded_by, recorded_at`,
-      [line_id, production_date, workers_required ?? null, workers_present, recorded_by ?? null]
-      // TODO: once auth middleware exists, take recorded_by from req.user.userId instead of the body
+       RETURNING record_id, line_id, production_date, workers_required, workers_present, notes, recorded_by, recorded_at`,
+      [line_id, production_date, workers_required ?? null, workers_present, notes ?? null, recorded_by ?? null]
     );
     res.status(201).json({ success: true, data: result.rows[0] });
   } catch (error: any) {
@@ -60,7 +59,7 @@ router.get('/', async (req: Request, res: Response) => {
     const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
     const result = await pool.query(
       `SELECT dw.record_id, dw.line_id, pl.line_name, dw.production_date,
-              dw.workers_required, dw.workers_present, dw.recorded_by, dw.recorded_at
+              dw.workers_required, dw.workers_present, dw.notes, dw.recorded_by, dw.recorded_at
        FROM daily_workforce dw
        JOIN production_lines pl ON pl.line_id = dw.line_id
        ${whereClause}

@@ -1,4 +1,5 @@
-import React from 'react';
+import Card from './ui/Card';
+import { Download } from 'lucide-react';
 
 interface Column {
   header: string;
@@ -12,37 +13,54 @@ interface ReportTableProps {
 }
 
 export default function ReportTable({ title, columns, data }: ReportTableProps) {
+  const handleExport = () => {
+    const headers = columns.map(c => c.header).join(',');
+    const rows = data.map(row => columns.map(c => row[c.accessor] ?? '').join(','));
+    const csv = [headers, ...rows].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${title.replace(/\s+/g, '_')}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
-    <div className="bg-white shadow rounded-lg border border-gray-200 p-4">
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-xl font-bold text-gray-800">{title}</h2>
-        <button className="bg-blue-600 text-white px-3 py-1 text-sm font-medium rounded hover:bg-blue-700">
-          Export CSV
-        </button>
-      </div>
+    <Card
+      header={
+        <div className="flex items-center justify-between">
+          <h3 className="font-semibold text-text-primary">{title}</h3>
+          {data.length > 0 && (
+            <button onClick={handleExport} className="flex items-center gap-1.5 text-xs font-medium text-brand-600 hover:text-brand-700 bg-brand-50 hover:bg-brand-100 px-2.5 py-1.5 rounded-lg transition-colors">
+              <Download size={14} />
+              Export CSV
+            </button>
+          )}
+        </div>
+      }
+    >
       <div className="overflow-x-auto">
-        <table className="min-w-full divide-y border">
-          <thead className="bg-gray-50">
-            <tr>
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-border text-left text-xs text-text-muted uppercase tracking-wider">
               {columns.map((col, idx) => (
-                <th key={idx} className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  {col.header}
-                </th>
+                <th key={idx} className="pb-2 pr-4 font-medium last:pr-0">{col.header}</th>
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-200">
+          <tbody className="divide-y divide-border">
             {data.length === 0 ? (
               <tr>
-                <td colSpan={columns.length} className="px-4 py-4 text-center text-sm text-gray-500">
+                <td colSpan={columns.length} className="py-8 text-center text-sm text-text-muted">
                   No data available.
                 </td>
               </tr>
             ) : (
               data.map((row, rowIdx) => (
-                <tr key={rowIdx}>
+                <tr key={rowIdx} className="hover:bg-gray-50 transition-colors">
                   {columns.map((col, colIdx) => (
-                    <td key={colIdx} className="px-4 py-2 text-sm text-gray-800">
+                    <td key={colIdx} className="py-2.5 pr-4 text-text-secondary last:pr-0">
                       {row[col.accessor]}
                     </td>
                   ))}
@@ -52,6 +70,6 @@ export default function ReportTable({ title, columns, data }: ReportTableProps) 
           </tbody>
         </table>
       </div>
-    </div>
+    </Card>
   );
 }
