@@ -1,4 +1,4 @@
-import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Link, Outlet, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
   ClipboardList,
@@ -10,13 +10,12 @@ import {
   BarChart3,
   ShieldCheck,
   Package,
-  LogOut,
   ChevronLeft,
   ChevronRight,
   Bell,
   Menu,
 } from 'lucide-react';
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 
 interface NavItem {
   name: string;
@@ -53,37 +52,11 @@ const pageTitles: Record<string, string> = {
 
 export default function MainLayout() {
   const location = useLocation();
-  const navigate = useNavigate();
-  const [user, setUser] = useState<any>(() => {
-    const stored = localStorage.getItem('user');
-    return stored ? JSON.parse(stored) : null;
-  });
+  const [user] = useState<any>({ name: 'Dev User', role: 'ADMIN' });
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  useEffect(() => {
-    if (!user) navigate('/login', { replace: true });
-  }, [user, navigate]);
-
-  const navItems = useMemo(
-    () => (user ? allNavItems.filter(item => item.roles.includes(user.role)) : []),
-    [user]
-  );
-
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    setUser(null);
-    navigate('/login');
-  };
-
-  if (!user) {
-    return (
-      <div className="h-screen flex items-center justify-center bg-gray-50">
-        <div className="animate-spin w-8 h-8 border-2 border-brand-600 border-t-transparent rounded-full" />
-      </div>
-    );
-  }
+  const navItems = useMemo(() => allNavItems, []);
 
   const pageTitle = pageTitles[location.pathname] || 'AmirtexOS';
 
@@ -156,9 +129,9 @@ export default function MainLayout() {
                   <p className="text-white font-medium truncate">{user.name}</p>
                   <p className="text-sidebar-text text-xs">{user.role}</p>
                 </div>
-                <button onClick={handleLogout} className="p-1.5 rounded-lg text-sidebar-text hover:text-white hover:bg-sidebar-hover transition-colors" title="Logout">
-                  <LogOut size={16} />
-                </button>
+                <div className="w-8 h-8 rounded-full bg-brand-600 flex items-center justify-center text-sm font-bold">
+                  D
+                </div>
               </div>
             )}
           </div>
