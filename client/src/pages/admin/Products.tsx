@@ -84,8 +84,8 @@ export default function Products() {
     <div className="p-4 lg:p-6 space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl lg:text-3xl font-bold text-text-primary">Products</h1>
-          <p className="text-sm text-text-muted mt-1">Manage product catalog and order details</p>
+          <h1 className="text-2xl lg:text-3xl font-bold text-ink">Products</h1>
+          <p className="text-sm text-cool-gray mt-1">Manage product catalog and order details</p>
         </div>
         <Button onClick={openCreate}>Add Product</Button>
       </div>
@@ -94,7 +94,7 @@ export default function Products() {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-border text-left text-xs text-text-muted uppercase tracking-wider bg-gray-50/50">
+              <tr className="border-b border-linen text-left text-xs text-cool-gray uppercase tracking-wider bg-greige/50">
                 <th className="px-5 py-3 font-medium">Product Name</th>
                 <th className="px-5 py-3 font-medium">Customer</th>
                 <th className="px-5 py-3 font-medium">Style Code</th>
@@ -106,33 +106,33 @@ export default function Products() {
             </thead>
             <tbody className="divide-y divide-border">
               {products.map(product => (
-                <tr key={product.product_id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-5 py-3 font-medium text-text-primary">{product.product_name}</td>
-                  <td className="px-5 py-3 text-text-secondary">
+                <tr key={product.product_id} className="hover:bg-greige transition-colors">
+                  <td className="px-5 py-3 font-medium text-ink">{product.product_name}</td>
+                  <td className="px-5 py-3 text-slate">
                     {customers.find(c => c.customer_id === product.customer_id)?.customer_name || '-'}
                   </td>
-                  <td className="px-5 py-3 text-text-secondary">{product.style_code || '-'}</td>
+                  <td className="px-5 py-3 text-slate">{product.style_code || '-'}</td>
                   <td className="px-5 py-3 text-right font-medium">{product.order_quantity?.toLocaleString()}</td>
                   <td className="px-5 py-3 text-right">{product.daily_target}</td>
                   <td className="px-5 py-3 text-center">
-                    <Badge variant={
-                      product.status === 'ACTIVE' ? 'success' :
+                    <Badge status={
+                      product.status === 'ACTIVE' ? 'on_target' :
                       product.status === 'PENDING' ? 'warning' :
-                      product.status === 'COMPLETED' ? 'info' :
-                      product.status === 'CANCELLED' ? 'danger' : 'default'
+                      product.status === 'COMPLETED' ? 'on_target' :
+                      product.status === 'CANCELLED' ? 'critical' : 'default'
                     } size="sm">{product.status}</Badge>
                   </td>
                   <td className="px-5 py-3 text-right space-x-1">
                     <Button variant="ghost" size="sm" onClick={() => openEdit(product)}>Edit</Button>
                     {product.status !== 'CANCELLED' && (
-                      <Button variant="ghost" size="sm" className="text-danger-600 hover:text-danger-700" onClick={() => handleCancel(product.product_id)}>Cancel</Button>
+                      <Button variant="ghost" size="sm" className="text-defect-red hover:text-defect-red" onClick={() => handleCancel(product.product_id)}>Cancel</Button>
                     )}
                   </td>
                 </tr>
               ))}
               {products.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-5 py-12 text-center text-sm text-text-muted">No products found.</td>
+                  <td colSpan={7} className="px-5 py-12 text-center text-sm text-cool-gray">No products found.</td>
                 </tr>
               )}
             </tbody>

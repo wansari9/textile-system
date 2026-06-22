@@ -16,20 +16,23 @@ interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
 const Select = forwardRef<HTMLSelectElement, SelectProps>(
   ({ label, error, options, placeholder, className = '', id, ...props }, ref) => {
     const selectId = id || label?.toLowerCase().replace(/\s+/g, '-');
+    const errorId = error ? `${selectId}-error` : undefined;
     return (
-      <div className="space-y-1">
+      <div className="space-y-[6px]">
         {label && (
-          <label htmlFor={selectId} className="block text-sm font-medium text-gray-700">
+          <label htmlFor={selectId} className="block text-[12px] font-semibold text-cool-gray uppercase tracking-wider font-sans">
             {label}
           </label>
         )}
         <select
           ref={ref}
           id={selectId}
-          className={`w-full px-3 py-2 rounded-lg border text-sm transition-all duration-150 bg-white focus:outline-none focus:ring-2 disabled:bg-gray-50 disabled:text-gray-400 ${
+          aria-invalid={error ? 'true' : undefined}
+          aria-describedby={errorId}
+          className={`w-full h-10 px-3 rounded-lg border text-sm font-sans bg-surface-raised transition-all duration-150 focus:outline-none focus:ring-2 disabled:bg-raw-cotton disabled:text-cool-gray ${
             error
-              ? 'border-danger-500 focus:ring-danger-500/40'
-              : 'border-gray-300 focus:ring-brand-500/40 focus:border-brand-500'
+              ? 'border-defect-red focus:ring-defect-red/40'
+              : 'border-linen focus:ring-brand/40 focus:border-brand'
           } ${className}`}
           {...props}
         >
@@ -38,7 +41,7 @@ const Select = forwardRef<HTMLSelectElement, SelectProps>(
             <option key={opt.value} value={opt.value}>{opt.label}</option>
           ))}
         </select>
-        {error && <p className="text-xs text-danger-600">{error}</p>}
+        {error && <p id={errorId} className="text-xs text-defect-red font-sans">{error}</p>}
       </div>
     );
   }

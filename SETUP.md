@@ -270,23 +270,7 @@ The client Axios interceptor handles this automatically after login.
 
 ---
 
-## 10. CORS
-
-The server uses open CORS (`app.use(cors())`) so the client dev server on port
-`5173` can reach the API on port `5000` without CORS errors on any OS.
-
-For production, restrict origins:
-
-```ts
-app.use(cors({
-  origin: 'https://your-production-domain.com',
-  credentials: true,
-}));
-```
-
----
-
-## 11. Platform-Specific Notes
+## 10. Platform-Specific Notes
 
 ### macOS
 
@@ -319,7 +303,7 @@ app.use(cors({
 | `relation "users" does not exist` | Schema not applied | Run `psql ... -f ai_studio_code.sql` |
 | `401 Unauthorized` when logged in | Token expired | Log out and log in again at `/login` |
 | Login says "Invalid credentials" | Wrong password or user | Run `npm run seed` again, or check the `users` table |
-| CORS error in browser | Client on different port | Ensure server uses `app.use(cors())` (it does) |
+| CORS error in browser | Client on different port | Serve the built client from Express (`client/dist` as static files) or use a reverse proxy to serve both on the same origin |
 | `Cannot find module` | Dependencies not installed | Run `npm install` in both `client/` and `server/` |
 | Port `5000` already in use | Another process on that port | Change `PORT` in `server/.env` and `VITE_API_BASE_URL` in `client/.env` |
 | `password authentication failed` in psql | pg_hba.conf method mismatch | Change `scram-sha-256` to `md5` in `pg_hba.conf`, restart PostgreSQL |

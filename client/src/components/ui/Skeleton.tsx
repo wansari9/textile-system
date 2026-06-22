@@ -6,7 +6,7 @@ interface SkeletonProps {
 }
 
 export default function Skeleton({ className = '', variant = 'text', width, height }: SkeletonProps) {
-  const base = 'animate-pulse bg-gray-200';
+  const base = 'animate-pulse bg-linen';
   const shape = variant === 'circle' ? 'rounded-full' : variant === 'rect' ? 'rounded-lg' : 'rounded h-4';
 
   return (
@@ -38,7 +38,7 @@ export function SkeletonTable({ rows = 5, cols = 5 }: { rows?: number; cols?: nu
 
 export function SkeletonCard() {
   return (
-    <div className="bg-white rounded-xl border border-border p-5 space-y-4">
+    <div className="bg-surface-raised rounded-xl border border-linen p-5 space-y-4">
       <div className="flex justify-between">
         <Skeleton className="w-1/3 h-5" />
         <Skeleton className="w-8 h-8 rounded-full" />

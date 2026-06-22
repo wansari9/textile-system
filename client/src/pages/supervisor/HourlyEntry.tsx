@@ -103,6 +103,7 @@ export default function HourlyEntry() {
       for (const hour of Object.keys(lineEntries)) {
         const entry = lineEntries[Number(hour)];
         if (entry.produced > 0 || entry.defect > 0) {
+          if (!line.assignment) continue;
           promises.push(
             logHourlyProduction({
               assignment_id: line.assignment.assignment_id,
@@ -130,16 +131,15 @@ export default function HourlyEntry() {
 
   return (
     <div className="p-4 lg:p-6 space-y-6">
-      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl lg:text-3xl font-bold text-text-primary">Hourly Production Entry</h1>
-          <p className="text-sm text-text-muted mt-1 flex items-center gap-2">
+          <h1 className="text-xl font-semibold text-ink font-sans">Hourly Production Entry</h1>
+          <p className="text-sm text-cool-gray mt-0.5 flex items-center gap-2 font-sans">
             <span>Enter production quantities per hour per line.</span>
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <input type="date" className="px-3 py-2 border border-border rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/40"
+          <input type="date" className="px-3 py-2 border border-linen rounded-lg text-sm bg-surface-raised font-sans focus:outline-none focus:ring-2 focus:ring-brand/40"
             value={selectedDate}
             onChange={e => setSelectedDate(e.target.value)} />
           <Button onClick={saveAll} disabled={saving || !loaded} loading={saving}>
@@ -151,7 +151,7 @@ export default function HourlyEntry() {
 
       {!loaded ? (
         <div className="flex items-center justify-center py-20">
-          <Loader2 size={32} className="animate-spin text-brand-500" />
+          <Loader2 size={32} className="animate-spin text-brand" />
         </div>
       ) : (
         <Card padding="none" className="overflow-hidden">

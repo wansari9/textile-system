@@ -1,41 +1,64 @@
 import type { ReactNode } from 'react';
+import { useEffect, useRef } from 'react';
 
-type BadgeVariant = 'default' | 'success' | 'warning' | 'danger' | 'info' | 'purple';
+type BadgeStatus = 'on_target' | 'warning' | 'critical' | 'maintenance' | 'idle' | 'default';
 
 interface BadgeProps {
   children: ReactNode;
-  variant?: BadgeVariant;
+  status?: BadgeStatus;
   dot?: boolean;
-  size?: 'sm' | 'md';
+  size?: 'sm' | 'md' | 'lg';
   className?: string;
 }
 
-const variantClasses: Record<BadgeVariant, string> = {
-  default: 'bg-gray-100 text-gray-700',
-  success: 'bg-success-50 text-success-700',
-  warning: 'bg-warning-50 text-warning-600',
-  danger: 'bg-danger-50 text-danger-700',
-  info: 'bg-info-50 text-info-600',
-  purple: 'bg-purple-50 text-purple-700',
+const statusClasses: Record<BadgeStatus, string> = {
+  on_target: 'bg-loom-green-bg text-loom-green',
+  warning: 'bg-amber-bg text-caution-amber',
+  critical: 'bg-defect-red-bg text-defect-red',
+  maintenance: 'bg-raw-cotton text-cool-gray',
+  idle: 'bg-raw-cotton text-slate',
+  default: 'bg-raw-cotton text-slate',
 };
 
-const dotColors: Record<BadgeVariant, string> = {
-  default: 'bg-gray-400',
-  success: 'bg-success-500',
-  warning: 'bg-warning-500',
-  danger: 'bg-danger-500',
-  info: 'bg-info-500',
-  purple: 'bg-purple-500',
+const dotColors: Record<BadgeStatus, string> = {
+  on_target: 'bg-loom-green',
+  warning: 'bg-caution-amber',
+  critical: 'bg-defect-red',
+  maintenance: 'bg-cool-gray',
+  idle: 'bg-slate',
+  default: 'bg-slate',
 };
 
-export default function Badge({ children, variant = 'default', dot = false, size = 'md', className = '' }: BadgeProps) {
+const sizeClasses = {
+  sm: 'px-2 py-0.5 text-[11px]',
+  md: 'px-2.5 py-1 text-[12px]',
+  lg: 'px-3 py-1.5 text-[13px]',
+};
+
+export default function Badge({ children, status = 'default', dot = false, size = 'md', className = '' }: BadgeProps) {
+  const dotRef = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => {
+    if (status === 'critical' && dotRef.current) {
+      dotRef.current.style.animation = 'none';
+      requestAnimationFrame(() => {
+        if (dotRef.current) {
+          dotRef.current.style.animation = 'pulse-once 0.6s ease-out 2';
+        }
+      });
+    }
+  }, [status]);
+
   return (
     <span
-      className={`inline-flex items-center gap-1.5 font-medium rounded-full ${
-        size === 'sm' ? 'px-2 py-0.5 text-[10px]' : 'px-2.5 py-1 text-xs'
-      } ${variantClasses[variant]} ${className}`}
+      className={`inline-flex items-center gap-1.5 font-medium rounded-full font-sans ${sizeClasses[size]} ${statusClasses[status]} ${className}`}
     >
-      {dot && <span className={`w-1.5 h-1.5 rounded-full ${dotColors[variant]}`} />}
+      {dot && (
+        <span
+          ref={dotRef}
+          className={`w-1.5 h-1.5 rounded-full ${dotColors[status]}`}
+        />
+      )}
       {children}
     </span>
   );

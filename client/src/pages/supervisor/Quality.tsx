@@ -20,7 +20,8 @@ export default function Quality() {
   }, []);
 
   const passRate = checked > 0 ? (((checked - faults) / checked) * 100).toFixed(1) : '0';
-  const isGood = Number(passRate) >= 95;
+  const passRateNum = Number(passRate);
+  const passRateStatus = passRateNum >= 95 ? 'good' : passRateNum >= 85 ? 'amber' : 'bad';
 
   const handleSubmit = async () => {
     if (!customerId) return;
@@ -49,11 +50,11 @@ export default function Quality() {
     <div className="p-4 lg:p-6 space-y-6 max-w-3xl">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl lg:text-3xl font-bold text-text-primary">Quality Control</h1>
-          <p className="text-sm text-text-muted mt-1">Enter total pieces checked and faults found for the day</p>
+          <h1 className="text-2xl lg:text-3xl font-bold text-ink">Quality Control</h1>
+          <p className="text-sm text-cool-gray mt-1">Enter total pieces checked and faults found for the day</p>
         </div>
         <div className="flex items-center gap-2">
-          <input type="date" className="px-3 py-2 border border-border rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/40"
+          <input type="date" className="px-3 py-2 border border-linen rounded-lg text-sm bg-surface-raised focus:outline-none focus:ring-2 focus:ring-brand/40"
             value={selectedDate}
             onChange={e => setSelectedDate(e.target.value)} />
         </div>
@@ -61,7 +62,7 @@ export default function Quality() {
 
       {message && (
         <div className={`p-3 rounded-lg text-sm font-medium flex items-center gap-2 ${
-          message.includes('success') ? 'bg-success-50 text-success-700 border border-success-500/20' : 'bg-danger-50 text-danger-700 border border-danger-500/20'
+          message.includes('success') ? 'bg-loom-green-bg text-loom-green border border-loom-green/20' : 'bg-defect-red-bg text-defect-red border border-defect-red/20'
         }`}>
           {message.includes('success') ? <CheckCircle2 size={16} /> : <XCircle size={16} />}
           {message}
@@ -77,17 +78,21 @@ export default function Quality() {
           <div className="grid grid-cols-2 gap-4">
             <Input label="Pieces Checked" type="number" value={checked} onChange={e => setChecked(Number(e.target.value))} />
             <Input label="Total Faults" type="number" value={faults} onChange={e => setFaults(Number(e.target.value))}
-              className="border-danger-300 focus:ring-danger-500/40" />
+              className="border-defect-red focus:ring-defect-red/40" />
           </div>
 
-          <div className="p-5 bg-gray-50 rounded-xl border border-border text-center">
-            <p className="text-sm text-text-muted font-medium mb-1">Pass Rate</p>
-            <p className={`text-4xl font-bold ${isGood ? 'text-success-600' : 'text-danger-600'}`}>
+          <div className="p-5 bg-raw-cotton rounded-xl border border-linen text-center">
+            <p className="text-sm text-cool-gray font-medium mb-1 font-sans">Pass Rate</p>
+            <p className={`text-4xl font-bold font-mono ${
+              passRateStatus === 'good' ? 'text-loom-green' : passRateStatus === 'amber' ? 'text-caution-amber' : 'text-defect-red'
+            }`}>
               {passRate}%
             </p>
-            <div className="mt-3 w-full bg-gray-200 rounded-full h-2.5 max-w-xs mx-auto">
-              <div className={`h-2.5 rounded-full transition-all duration-300 ${isGood ? 'bg-success-500' : 'bg-danger-500'}`}
-                style={{ width: `${Math.min(Number(passRate), 100)}%` }} />
+            <div className="mt-3 w-full bg-linen rounded-full h-2.5 max-w-xs mx-auto">
+              <div className={`h-2.5 rounded-full transition-all duration-300 ${
+                passRateStatus === 'good' ? 'bg-loom-green' : passRateStatus === 'amber' ? 'bg-caution-amber' : 'bg-defect-red'
+              }`}
+                style={{ width: `${Math.min(passRateNum, 100)}%` }} />
             </div>
           </div>
 

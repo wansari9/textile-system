@@ -12,11 +12,11 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const variantClasses: Record<Variant, string> = {
-  primary: 'bg-brand-600 text-white hover:bg-brand-700 shadow-sm active:bg-brand-800',
-  secondary: 'bg-gray-100 text-gray-700 hover:bg-gray-200 active:bg-gray-300 border border-gray-200',
-  outline: 'bg-white text-brand-600 hover:bg-brand-50 border border-brand-300 active:bg-brand-100',
-  ghost: 'bg-transparent text-gray-600 hover:bg-gray-100 active:bg-gray-200',
-  danger: 'bg-danger-500 text-white hover:bg-danger-600 shadow-sm active:bg-danger-700',
+  primary: 'bg-brand text-white hover:bg-brand-dark shadow-sm active:bg-brand-dark',
+  secondary: 'bg-raw-cotton text-slate hover:bg-linen active:bg-thread border border-linen',
+  outline: 'bg-surface-raised text-brand hover:bg-brand-light border border-brand/30 active:bg-brand-light',
+  ghost: 'bg-transparent text-slate hover:bg-raw-cotton active:bg-linen',
+  danger: 'bg-defect-red text-white hover:bg-defect-red/90 shadow-sm active:bg-defect-red',
 };
 
 const sizeClasses: Record<Size, string> = {
@@ -31,7 +31,7 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       <button
         ref={ref}
         disabled={disabled || loading}
-        className={`inline-flex items-center justify-center font-medium rounded-lg transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-brand-500/40 disabled:opacity-50 disabled:pointer-events-none ${variantClasses[variant]} ${sizeClasses[size]} ${className}`}
+        className={`inline-flex items-center justify-center font-medium rounded-lg transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-brand/40 disabled:opacity-50 disabled:pointer-events-none font-sans ${variantClasses[variant]} ${sizeClasses[size]} ${className}`}
         {...props}
       >
         {loading && <Spinner size="sm" />}

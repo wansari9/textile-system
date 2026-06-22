@@ -79,8 +79,8 @@ export default function Customers() {
     <div className="p-4 lg:p-6 space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl lg:text-3xl font-bold text-text-primary">Customers & Products</h1>
-          <p className="text-sm text-text-muted mt-1">Manage customer accounts and their product catalog</p>
+          <h1 className="text-2xl lg:text-3xl font-bold text-ink">Customers & Products</h1>
+          <p className="text-sm text-cool-gray mt-1">Manage customer accounts and their product catalog</p>
         </div>
         <Button onClick={openCreate}>Add Customer</Button>
       </div>
@@ -89,7 +89,7 @@ export default function Customers() {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-border text-left text-xs text-text-muted uppercase tracking-wider bg-gray-50/50">
+              <tr className="border-b border-linen text-left text-xs text-cool-gray uppercase tracking-wider bg-greige/50">
                 <th className="px-5 py-3 font-medium w-8"></th>
                 <th className="px-5 py-3 font-medium">Customer Name</th>
                 <th className="px-5 py-3 font-medium">Contact Person</th>
@@ -100,31 +100,31 @@ export default function Customers() {
             <tbody className="divide-y divide-border">
               {customers.map(customer => (
                 <Fragment key={customer.customer_id}>
-                  <tr className="hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => toggleExpand(customer.customer_id)}>
-                    <td className="px-5 py-3 text-center text-text-muted">
+                  <tr className="hover:bg-greige transition-colors cursor-pointer" onClick={() => toggleExpand(customer.customer_id)}>
+                    <td className="px-5 py-3 text-center text-cool-gray">
                       {expandedId === customer.customer_id ? <ChevronDown size={16} className="inline" /> : <ChevronRight size={16} className="inline" />}
                     </td>
-                    <td className="px-5 py-3 font-medium text-text-primary">{customer.customer_name}</td>
-                    <td className="px-5 py-3 text-text-secondary">{customer.contact_person}</td>
-                    <td className="px-5 py-3 text-text-secondary">{customer.phone}</td>
+                    <td className="px-5 py-3 font-medium text-ink">{customer.customer_name}</td>
+                    <td className="px-5 py-3 text-slate">{customer.contact_person}</td>
+                    <td className="px-5 py-3 text-slate">{customer.phone}</td>
                     <td className="px-5 py-3 text-right space-x-1" onClick={e => e.stopPropagation()}>
                       <Button variant="ghost" size="sm" onClick={() => openEdit(customer)}>Edit</Button>
-                      <Button variant="ghost" size="sm" className="text-danger-600 hover:text-danger-700" onClick={() => handleDelete(customer.customer_id)}>Deactivate</Button>
+                      <Button variant="ghost" size="sm" className="text-defect-red hover:text-defect-red" onClick={() => handleDelete(customer.customer_id)}>Deactivate</Button>
                     </td>
                   </tr>
                   {expandedId === customer.customer_id && (
                     <tr key={`${customer.customer_id}-products`}>
-                      <td colSpan={5} className="px-5 py-4 bg-gray-50/50">
-                        <div className="bg-white rounded-lg border border-border p-4">
-                          <h4 className="font-semibold text-text-primary text-sm mb-3">Products</h4>
+                      <td colSpan={5} className="px-5 py-4 bg-greige/50">
+                        <div className="bg-surface-raised rounded-lg border border-linen p-4">
+                          <h4 className="font-semibold text-ink text-sm mb-3">Products</h4>
                           {!productsMap[customer.customer_id] ? (
-                            <p className="text-sm text-text-muted">Loading...</p>
+                            <p className="text-sm text-cool-gray">Loading...</p>
                           ) : productsMap[customer.customer_id].length === 0 ? (
-                            <p className="text-sm text-text-muted">No products for this customer.</p>
+                            <p className="text-sm text-cool-gray">No products for this customer.</p>
                           ) : (
                             <table className="w-full text-sm">
                               <thead>
-                                <tr className="text-xs text-text-muted uppercase border-b border-border">
+                                <tr className="text-xs text-cool-gray uppercase border-b border-linen">
                                   <th className="text-left pb-2 pr-4 font-medium">Product Name</th>
                                   <th className="text-left pb-2 pr-4 font-medium">Style Code</th>
                                   <th className="text-right pb-2 pr-4 font-medium">Order Quantity</th>
@@ -132,15 +132,15 @@ export default function Customers() {
                                   <th className="text-center pb-2 font-medium">Status</th>
                                 </tr>
                               </thead>
-                              <tbody className="divide-y divide-border text-text-secondary">
+                              <tbody className="divide-y divide-border text-slate">
                                 {productsMap[customer.customer_id].map((prod: any) => (
                                   <tr key={prod.product_id}>
-                                    <td className="py-2 pr-4 text-text-primary font-medium">{prod.product_name}</td>
+                                    <td className="py-2 pr-4 text-ink font-medium">{prod.product_name}</td>
                                     <td className="py-2 pr-4">{prod.style_code}</td>
                                     <td className="py-2 pr-4 text-right">{prod.order_quantity?.toLocaleString()}</td>
                                     <td className="py-2 pr-4 text-right">{prod.daily_target}</td>
                                     <td className="py-2 text-center">
-                                      <Badge variant={prod.status === 'ACTIVE' ? 'success' : prod.status === 'COMPLETED' ? 'info' : prod.status === 'CANCELLED' ? 'danger' : 'warning'} size="sm">
+                                      <Badge status={prod.status === 'ACTIVE' ? 'on_target' : prod.status === 'COMPLETED' ? 'on_target' : prod.status === 'CANCELLED' ? 'critical' : 'warning'} size="sm">
                                         {prod.status}
                                       </Badge>
                                     </td>
@@ -157,7 +157,7 @@ export default function Customers() {
               ))}
               {customers.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-5 py-12 text-center text-sm text-text-muted">No customers found.</td>
+                  <td colSpan={5} className="px-5 py-12 text-center text-sm text-cool-gray">No customers found.</td>
                 </tr>
               )}
             </tbody>

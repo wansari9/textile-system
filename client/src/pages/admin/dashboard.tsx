@@ -145,16 +145,16 @@ export default function Dashboard() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl lg:text-3xl font-bold text-text-primary">Dashboard</h1>
-          <p className="text-sm text-text-muted mt-1">
-            Production overview for <span className="font-medium text-text-secondary">{new Date(selectedDate).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
+          <h1 className="text-2xl lg:text-3xl font-bold text-ink">Dashboard</h1>
+          <p className="text-sm text-cool-gray mt-1">
+            Production overview for <span className="font-medium text-slate">{new Date(selectedDate).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <input type="date" className="px-3 py-2 border border-border rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/40"
+          <input type="date" className="px-3 py-2 border border-linen rounded-lg text-sm bg-surface-raised focus:outline-none focus:ring-2 focus:ring-brand/40"
             value={selectedDate}
             onChange={e => setSelectedDate(e.target.value)} />
-          <button onClick={() => fetchData(selectedDate)} className="p-2 text-gray-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-colors">
+          <button onClick={() => fetchData(selectedDate)} className="p-2 text-cool-gray hover:text-brand-dark hover:bg-brand-light rounded-lg transition-colors">
             <RefreshCw size={18} />
           </button>
         </div>
@@ -162,47 +162,39 @@ export default function Dashboard() {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-24 h-24 bg-brand-50 rounded-bl-3xl -mr-6 -mt-6" />
-          <div className="relative z-10">
-            <div className="flex items-center gap-2 text-sm text-text-muted mb-1">
-              <TrendingUp size={16} className="text-brand-500" />
-              <span>Total Produced</span>
-            </div>
-            <p className="text-3xl font-bold text-text-primary">{totalProduced.toLocaleString()}</p>
+        <Card>
+          <div className="flex items-center gap-2 text-xs text-cool-gray uppercase tracking-wider mb-1 font-sans">
+            <TrendingUp size={14} className="text-brand" />
+            <span>Total Produced</span>
           </div>
+          <p className="text-[32px] font-medium font-mono text-ink leading-tight">{totalProduced.toLocaleString()}</p>
         </Card>
-        <Card className="relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-24 h-24 bg-success-50 rounded-bl-3xl -mr-6 -mt-6" />
-          <div className="relative z-10">
-            <div className="flex items-center gap-2 text-sm text-text-muted mb-1">
-              <Target size={16} className="text-success-600" />
-              <span>Total Target</span>
-            </div>
-            <p className="text-3xl font-bold text-text-primary">{totalTarget.toLocaleString()}</p>
+        <Card>
+          <div className="flex items-center gap-2 text-xs text-cool-gray uppercase tracking-wider mb-1 font-sans">
+            <Target size={14} className="text-loom-green" />
+            <span>Total Target</span>
           </div>
+          <p className="text-[32px] font-medium font-mono text-ink leading-tight">{totalTarget.toLocaleString()}</p>
         </Card>
-        <Card className="relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-24 h-24 bg-warning-50 rounded-bl-3xl -mr-6 -mt-6" />
-          <div className="relative z-10">
-            <div className="flex items-center gap-2 text-sm text-text-muted mb-1">
-              <Activity size={16} className="text-warning-600" />
-              <span>Efficiency Rate</span>
-            </div>
-            <p className={`text-3xl font-bold ${efficiency >= 90 ? 'text-success-600' : efficiency >= 70 ? 'text-warning-600' : 'text-danger-600'}`}>
-              {efficiency}%
-            </p>
+        <Card>
+          <div className="flex items-center gap-2 text-xs text-cool-gray uppercase tracking-wider mb-1 font-sans">
+            <Activity size={14} className="text-caution-amber" />
+            <span>Efficiency Rate</span>
           </div>
+          <p className={`text-[32px] font-medium font-mono leading-tight ${
+            efficiency >= 100 ? 'text-loom-green' : efficiency >= 70 ? 'text-caution-amber' : 'text-defect-red'
+          }`}>
+            {efficiency}%
+          </p>
         </Card>
-        <Card className="relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-24 h-24 bg-info-50 rounded-bl-3xl -mr-6 -mt-6" />
-          <div className="relative z-10">
-            <div className="flex items-center gap-2 text-sm text-text-muted mb-1">
-              <LayoutDashboard size={16} className="text-info-600" />
-              <span>Active Lines</span>
-            </div>
-            <p className="text-3xl font-bold text-text-primary">{activeLines}<span className="text-lg text-text-muted font-normal"> / {lines.length}</span></p>
+        <Card>
+          <div className="flex items-center gap-2 text-xs text-cool-gray uppercase tracking-wider mb-1 font-sans">
+            <LayoutDashboard size={14} className="text-brand" />
+            <span>Active Lines</span>
           </div>
+          <p className="text-[32px] font-medium font-mono text-ink leading-tight">
+            {activeLines}<span className="text-lg text-cool-gray font-normal font-sans"> / {lines.length}</span>
+          </p>
         </Card>
       </div>
 
@@ -215,9 +207,9 @@ export default function Dashboard() {
           {/* Charts Row */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Production by Line */}
-            <Card header={<h3 className="font-semibold text-text-primary">Production by Line</h3>}>
+            <Card header={<h3 className="font-semibold text-ink">Production by Line</h3>}>
               {barData.length === 0 ? (
-                <p className="text-sm text-text-muted text-center py-8">No production data for this date.</p>
+                <p className="text-sm text-cool-gray text-center py-8">No production data for this date.</p>
               ) : (
                 <div className="h-72">
                   <ResponsiveContainer width="100%" height="100%">
@@ -238,9 +230,9 @@ export default function Dashboard() {
             </Card>
 
             {/* Hourly Trend */}
-            <Card header={<h3 className="font-semibold text-text-primary">Hourly Production Trend</h3>}>
+            <Card header={<h3 className="font-semibold text-ink">Hourly Production Trend</h3>}>
               {hourlyData.every(d => d.produced === 0) ? (
-                <p className="text-sm text-text-muted text-center py-8">No hourly data for this date.</p>
+                <p className="text-sm text-cool-gray text-center py-8">No hourly data for this date.</p>
               ) : (
                 <div className="h-72">
                   <ResponsiveContainer width="100%" height="100%">
@@ -262,9 +254,9 @@ export default function Dashboard() {
           {/* Second row */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Process Stages */}
-            <Card header={<h3 className="font-semibold text-text-primary">Process Stages</h3>}>
+            <Card header={<h3 className="font-semibold text-ink">Process Stages</h3>}>
               {stagesChartData.every(d => d.completed === 0) ? (
-                <p className="text-sm text-text-muted text-center py-8">No stage data.</p>
+                <p className="text-sm text-cool-gray text-center py-8">No stage data.</p>
               ) : (
                 <div className="h-56">
                   <ResponsiveContainer width="100%" height="100%">
@@ -283,9 +275,9 @@ export default function Dashboard() {
             </Card>
 
             {/* Quality Overview */}
-            <Card header={<h3 className="font-semibold text-text-primary">Quality Overview</h3>}>
+            <Card header={<h3 className="font-semibold text-ink">Quality Overview</h3>}>
               {qualityPie.length === 0 ? (
-                <p className="text-sm text-text-muted text-center py-8">No quality data.</p>
+                <p className="text-sm text-cool-gray text-center py-8">No quality data.</p>
               ) : (
                 <div className="h-56 flex items-center justify-center">
                   <ResponsiveContainer width="100%" height="100%">
@@ -305,7 +297,7 @@ export default function Dashboard() {
               {qualityPie.length > 0 && (
                 <div className="flex flex-wrap gap-3 mt-2 justify-center">
                   {qualityPie.map((q, i) => (
-                    <div key={i} className="flex items-center gap-1.5 text-xs text-text-secondary">
+                    <div key={i} className="flex items-center gap-1.5 text-xs text-slate">
                       <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: q.color }} />
                       {q.name}: {q.value.toLocaleString()}
                     </div>
@@ -318,17 +310,17 @@ export default function Dashboard() {
           {/* Branch Summary */}
           <Card header={
             <div className="flex items-center justify-between">
-              <h3 className="font-semibold text-text-primary">Branch Summary</h3>
-              <Badge variant="info" size="sm">{branchesData.length} branches</Badge>
+              <h3 className="font-semibold text-ink">Branch Summary</h3>
+              <Badge status="on_target" size="sm">{branchesData.length} branches</Badge>
             </div>
           }>
             {branchesData.length === 0 ? (
-              <p className="text-sm text-text-muted text-center py-4">No branch data.</p>
+              <p className="text-sm text-cool-gray text-center py-4">No branch data.</p>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-border text-left text-xs text-text-muted uppercase tracking-wider">
+                    <tr className="border-b border-linen text-left text-xs text-cool-gray uppercase tracking-wider">
                       <th className="pb-2 pr-4 font-medium">Branch</th>
                       <th className="pb-2 pr-4 font-medium text-right">Target</th>
                       <th className="pb-2 pr-4 font-medium text-right">Produced</th>
@@ -337,11 +329,11 @@ export default function Dashboard() {
                   </thead>
                   <tbody className="divide-y divide-border">
                     {branchesData.map((b: any) => (
-                      <tr key={b.branch} className="hover:bg-gray-50 transition-colors">
-                        <td className="py-2.5 pr-4 font-medium text-text-primary">{b.branch}</td>
-                        <td className="py-2.5 pr-4 text-right text-text-secondary">{b.target.toLocaleString()}</td>
-                        <td className="py-2.5 pr-4 text-right text-text-secondary">{b.actual.toLocaleString()}</td>
-                        <td className={`py-2.5 text-right font-medium ${b.diff < 0 ? 'text-danger-600' : 'text-success-600'}`}>
+                      <tr key={b.branch} className="hover:bg-greige transition-colors">
+                        <td className="py-2.5 pr-4 font-medium text-ink">{b.branch}</td>
+                        <td className="py-2.5 pr-4 text-right text-slate">{b.target.toLocaleString()}</td>
+                        <td className="py-2.5 pr-4 text-right text-slate">{b.actual.toLocaleString()}</td>
+                        <td className={`py-2.5 text-right font-medium ${b.diff < 0 ? 'text-defect-red' : 'text-loom-green'}`}>
                           {b.diff > 0 ? '+' : ''}{b.diff.toLocaleString()}
                         </td>
                       </tr>
@@ -355,17 +347,17 @@ export default function Dashboard() {
           {/* Production Lines */}
           <Card header={
             <div className="flex items-center justify-between">
-              <h3 className="font-semibold text-text-primary">Production Lines</h3>
-              <Badge variant="success" size="sm">{activeLines} active</Badge>
+              <h3 className="font-semibold text-ink">Production Lines</h3>
+              <Badge status="on_target" size="sm">{activeLines} active</Badge>
             </div>
           } padding="none">
             {lines.length === 0 ? (
-              <p className="text-sm text-text-muted text-center py-8">No lines configured.</p>
+              <p className="text-sm text-cool-gray text-center py-8">No lines configured.</p>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-border text-left text-xs text-text-muted uppercase tracking-wider bg-gray-50/50">
+                    <tr className="border-b border-linen text-left text-xs text-cool-gray uppercase tracking-wider bg-greige/50">
                       <th className="px-5 py-3 font-medium">Line</th>
                       <th className="px-5 py-3 font-medium">Product / Customer</th>
                       <th className="px-5 py-3 font-medium text-right">Produced</th>
@@ -379,22 +371,22 @@ export default function Dashboard() {
                     {lines.map(line => {
                       const pct = line.target > 0 ? Math.round((line.produced / line.target) * 100) : 0;
                       return (
-                        <tr key={line.id} className="hover:bg-gray-50 transition-colors">
-                          <td className="px-5 py-3 font-medium text-text-primary">{line.name}</td>
-                          <td className="px-5 py-3 text-text-secondary">
+                        <tr key={line.id} className="hover:bg-greige transition-colors">
+                          <td className="px-5 py-3 font-medium text-ink">{line.name}</td>
+                          <td className="px-5 py-3 text-slate">
                             <span className="block truncate max-w-40">{line.product}</span>
-                            <span className="text-xs text-text-muted">{line.customer}</span>
+                            <span className="text-xs text-cool-gray">{line.customer}</span>
                           </td>
                           <td className="px-5 py-3 text-right font-medium">{line.produced.toLocaleString()}</td>
-                          <td className="px-5 py-3 text-right text-text-secondary">{line.target.toLocaleString()}</td>
+                          <td className="px-5 py-3 text-right text-slate">{line.target.toLocaleString()}</td>
                           <td className="px-5 py-3 text-right">
-                            <span className={`font-medium ${pct >= 90 ? 'text-success-600' : pct >= 70 ? 'text-warning-600' : 'text-danger-600'}`}>
+                            <span className={`font-medium ${pct >= 90 ? 'text-loom-green' : pct >= 70 ? 'text-caution-amber' : 'text-defect-red'}`}>
                               {pct}%
                             </span>
                           </td>
-                          <td className="px-5 py-3 text-right text-text-secondary">{line.defects}</td>
+                          <td className="px-5 py-3 text-right text-slate">{line.defects}</td>
                           <td className="px-5 py-3 text-right">
-                            <Badge variant={line.status === 'ACTIVE' ? 'success' : line.status === 'MAINTENANCE' ? 'warning' : 'default'} size="sm">
+                            <Badge status={line.status === 'ACTIVE' ? 'on_target' : line.status === 'MAINTENANCE' ? 'warning' : 'default'} size="sm">
                               {line.status}
                             </Badge>
                           </td>
@@ -409,11 +401,11 @@ export default function Dashboard() {
 
           {/* Quality Table */}
           {qualityData.length > 0 && (
-            <Card header={<h3 className="font-semibold text-text-primary">Quality Control Details</h3>} padding="none">
+            <Card header={<h3 className="font-semibold text-ink">Quality Control Details</h3>} padding="none">
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-border text-left text-xs text-text-muted uppercase tracking-wider bg-gray-50/50">
+                    <tr className="border-b border-linen text-left text-xs text-cool-gray uppercase tracking-wider bg-greige/50">
                       <th className="px-5 py-3 font-medium">Customer</th>
                       <th className="px-5 py-3 font-medium text-right">Checked</th>
                       <th className="px-5 py-3 font-medium text-right">Faults</th>
@@ -426,13 +418,13 @@ export default function Dashboard() {
                       const ok = q.pcs_checked - q.pcs_faults;
                       const rate = q.pcs_checked > 0 ? ((ok / q.pcs_checked) * 100).toFixed(1) : '0';
                       return (
-                        <tr key={q.check_id || q.customer_id} className="hover:bg-gray-50 transition-colors">
-                          <td className="px-5 py-3 font-medium text-text-primary">{q.customer_name}</td>
+                        <tr key={q.check_id || q.customer_id} className="hover:bg-greige transition-colors">
+                          <td className="px-5 py-3 font-medium text-ink">{q.customer_name}</td>
                           <td className="px-5 py-3 text-right">{q.pcs_checked.toLocaleString()}</td>
-                          <td className="px-5 py-3 text-right text-danger-600 font-medium">{q.pcs_faults}</td>
+                          <td className="px-5 py-3 text-right text-defect-red font-medium">{q.pcs_faults}</td>
                           <td className="px-5 py-3 text-right">{ok.toLocaleString()}</td>
                           <td className="px-5 py-3 text-right">
-                            <Badge variant={Number(rate) >= 95 ? 'success' : Number(rate) >= 80 ? 'warning' : 'danger'}>{rate}%</Badge>
+                            <Badge status={Number(rate) >= 95 ? 'on_target' : Number(rate) >= 80 ? 'warning' : 'critical'}>{rate}%</Badge>
                           </td>
                         </tr>
                       );

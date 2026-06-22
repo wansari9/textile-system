@@ -20,17 +20,17 @@ export const useToast = () => useContext(ToastContext);
 let nextId = 0;
 
 const icons: Record<ToastType, ReactNode> = {
-  success: <CheckCircle2 size={18} className="text-success-600" />,
-  error: <XCircle size={18} className="text-danger-600" />,
-  warning: <AlertCircle size={18} className="text-warning-600" />,
-  info: <Info size={18} className="text-info-600" />,
+  success: <CheckCircle2 size={18} className="text-loom-green" />,
+  error: <XCircle size={18} className="text-defect-red" />,
+  warning: <AlertCircle size={18} className="text-caution-amber" />,
+  info: <Info size={18} className="text-brand" />,
 };
 
 const bgColors: Record<ToastType, string> = {
-  success: 'bg-success-50 border-success-500/20',
-  error: 'bg-danger-50 border-danger-500/20',
-  warning: 'bg-warning-50 border-warning-500/20',
-  info: 'bg-info-50 border-info-500/20',
+  success: 'bg-loom-green-bg border-loom-green/20',
+  error: 'bg-defect-red-bg border-defect-red/20',
+  warning: 'bg-amber-bg border-caution-amber/20',
+  info: 'bg-brand-light border-brand/20',
 };
 
 function ToastItem({ t, onRemove }: { t: Toast; onRemove: (id: number) => void }) {
@@ -42,8 +42,8 @@ function ToastItem({ t, onRemove }: { t: Toast; onRemove: (id: number) => void }
   return (
     <div className={`flex items-center gap-2.5 px-4 py-3 rounded-lg border shadow-card animate-[slideUp_200ms_ease-out] ${bgColors[t.type]}`}>
       {icons[t.type]}
-      <p className="text-sm font-medium text-text-primary flex-1">{t.message}</p>
-      <button onClick={() => onRemove(t.id)} className="p-0.5 text-text-muted hover:text-text-primary">
+      <p className="text-sm font-medium text-ink flex-1 font-sans">{t.message}</p>
+      <button onClick={() => onRemove(t.id)} className="p-0.5 text-cool-gray hover:text-ink">
         <X size={14} />
       </button>
     </div>

@@ -74,8 +74,8 @@ export default function Users() {
     <div className="p-4 lg:p-6 space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl lg:text-3xl font-bold text-text-primary">User Management</h1>
-          <p className="text-sm text-text-muted mt-1">Manage system users and their role assignments</p>
+          <h1 className="text-2xl lg:text-3xl font-bold text-ink">User Management</h1>
+          <p className="text-sm text-cool-gray mt-1">Manage system users and their role assignments</p>
         </div>
         <Button onClick={openCreate}>Add User</Button>
       </div>
@@ -84,7 +84,7 @@ export default function Users() {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-border text-left text-xs text-text-muted uppercase tracking-wider bg-gray-50/50">
+              <tr className="border-b border-linen text-left text-xs text-cool-gray uppercase tracking-wider bg-greige/50">
                 <th className="px-5 py-3 font-medium">Username</th>
                 <th className="px-5 py-3 font-medium">Full Name</th>
                 <th className="px-5 py-3 font-medium">Role</th>
@@ -94,24 +94,24 @@ export default function Users() {
             </thead>
             <tbody className="divide-y divide-border">
               {users.map(user => (
-                <tr key={user.user_id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-5 py-3 font-medium text-text-primary">{user.username}</td>
-                  <td className="px-5 py-3 text-text-secondary">{user.full_name}</td>
+                <tr key={user.user_id} className="hover:bg-greige transition-colors">
+                  <td className="px-5 py-3 font-medium text-ink">{user.username}</td>
+                  <td className="px-5 py-3 text-slate">{user.full_name}</td>
                   <td className="px-5 py-3">
-                    <Badge variant={user.role === 'ADMIN' ? 'purple' : 'info'} size="sm">{user.role}</Badge>
+                    <Badge status={user.role === 'ADMIN' ? 'default' : 'on_target'} size="sm">{user.role}</Badge>
                   </td>
-                  <td className="px-5 py-3 text-text-secondary">
+                  <td className="px-5 py-3 text-slate">
                     {lines.find(l => l.line_id === user.assigned_line_id)?.line_name || '-'}
                   </td>
                   <td className="px-5 py-3 text-right space-x-1">
                     <Button variant="ghost" size="sm" onClick={() => openEdit(user)}>Edit</Button>
-                    <Button variant="ghost" size="sm" className="text-danger-600 hover:text-danger-700" onClick={() => handleDelete(user.user_id)}>Deactivate</Button>
+                    <Button variant="ghost" size="sm" className="text-defect-red hover:text-defect-red" onClick={() => handleDelete(user.user_id)}>Deactivate</Button>
                   </td>
                 </tr>
               ))}
               {users.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-5 py-12 text-center text-sm text-text-muted">No users found.</td>
+                  <td colSpan={5} className="px-5 py-12 text-center text-sm text-cool-gray">No users found.</td>
                 </tr>
               )}
             </tbody>

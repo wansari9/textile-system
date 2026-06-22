@@ -19,20 +19,24 @@ const paddingClasses = {
 export default function Card({ children, header, footer, className = '', padding = 'md', hover = false }: CardProps) {
   return (
     <div
-      className={`bg-white rounded-xl border border-border shadow-card transition-all duration-200 ${
-        hover ? 'hover:shadow-card-hover hover:border-gray-300' : ''
+      className={`bg-surface-raised rounded-xl border border-linen shadow-card transition-all duration-200 ${
+        hover ? 'hover:shadow-card-hover hover:border-thread' : ''
       } ${className}`}
     >
       {header && (
-        <div className="px-5 py-4 border-b border-border">
-          {header}
+        <div className="px-5 py-4 border-b border-linen">
+          {typeof header === 'string' ? (
+            <h3 className="text-[16px] font-semibold text-ink font-sans">{header}</h3>
+          ) : (
+            header
+          )}
         </div>
       )}
       <div className={paddingClasses[padding]}>
         {children}
       </div>
       {footer && (
-        <div className="px-5 py-3 border-t border-border bg-gray-50 rounded-b-xl">
+        <div className="px-5 py-3 border-t border-linen bg-greige rounded-b-xl">
           {footer}
         </div>
       )}
