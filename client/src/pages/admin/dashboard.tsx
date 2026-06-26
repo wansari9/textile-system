@@ -118,7 +118,7 @@ export default function Dashboard() {
   }, [selectedDate]);
 
   const totalProduced = summary?.total?.total_produced ?? 0;
-  const totalTarget = summary?.total?.total_target ?? 0;
+  const totalTarget = summary?.total?.total_assigned_target ?? summary?.total?.total_target ?? 0;
   const efficiency = totalTarget > 0 ? Math.round((totalProduced / totalTarget) * 100) : 0;
   const activeLines = lines.filter(l => l.status === 'ACTIVE').length;
 

@@ -25,7 +25,7 @@ router.get('/', async (req: Request, res: Response) => {
        FROM production_lines pl
        JOIN branches b ON b.branch_id = pl.branch_id
        ${whereClause}
-       ORDER BY pl.line_name`,
+        ORDER BY NULLIF(regexp_replace(pl.line_name, '[^0-9]', '', 'g'), '')::int`,
       params
     );
     res.json({ success: true, data: result.rows });

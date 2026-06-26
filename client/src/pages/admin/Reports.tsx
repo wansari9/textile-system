@@ -12,12 +12,20 @@ export default function Reports() {
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
 
   useEffect(() => {
+    getCompanyReport({}).then(res => {
+      if (res.success && res.data?.length) {
+        setSelectedDate(res.data[0].production_date?.split('T')[0]);
+      }
+    }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
     setLoading(true);
     const fetchData = tab === 'daily'
       ? getDailyReport(selectedDate)
       : tab === 'weekly'
         ? getWeeklyReport(
-            new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0],
+            new Date(new Date(selectedDate).getTime() - 7 * 86400000).toISOString().split('T')[0],
             selectedDate
           )
         : getCompanyReport({ date: selectedDate });
