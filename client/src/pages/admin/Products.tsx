@@ -3,6 +3,7 @@ import { getProducts, createProduct, updateProduct, deleteProduct } from '../../
 import { getCustomers } from '../../api/customers';
 import { Button, Card, Input, Select, Badge, Modal } from '../../components/ui';
 import { useToast } from '../../components/ui/Toast';
+import { page, table } from '../../design';
 
 export default function Products() {
   const [products, setProducts] = useState<any[]>([]);
@@ -81,11 +82,11 @@ export default function Products() {
   };
 
   return (
-    <div className="p-4 lg:p-6 space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+    <div className={page.shell}>
+      <div className={page.header}>
         <div>
-          <h1 className="text-2xl lg:text-3xl font-bold text-ink">Products</h1>
-          <p className="text-sm text-cool-gray mt-1">Manage product catalog and order details</p>
+          <h1 className={page.title}>Products</h1>
+          <p className={page.subtitle}>Manage product catalog and order details</p>
         </div>
         <Button onClick={openCreate}>Add Product</Button>
       </div>
@@ -94,7 +95,7 @@ export default function Products() {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-linen text-left text-xs text-cool-gray uppercase tracking-wider bg-greige/50">
+              <tr className={table.headRow}>
                 <th className="px-5 py-3 font-medium">Product Name</th>
                 <th className="px-5 py-3 font-medium">Customer</th>
                 <th className="px-5 py-3 font-medium">Style Code</th>
@@ -104,14 +105,14 @@ export default function Products() {
                 <th className="px-5 py-3 font-medium text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-border">
+            <tbody className={table.body}>
               {products.map(product => (
-                <tr key={product.product_id} className="hover:bg-greige transition-colors">
+                <tr key={product.product_id} className={table.row}>
                   <td className="px-5 py-3 font-medium text-ink">{product.product_name}</td>
-                  <td className="px-5 py-3 text-slate">
+                  <td className="px-5 py-3 text-ink-soft">
                     {customers.find(c => c.customer_id === product.customer_id)?.customer_name || '-'}
                   </td>
-                  <td className="px-5 py-3 text-slate">{product.style_code || '-'}</td>
+                  <td className="px-5 py-3 text-ink-soft">{product.style_code || '-'}</td>
                   <td className="px-5 py-3 text-right font-medium">{product.order_quantity?.toLocaleString()}</td>
                   <td className="px-5 py-3 text-right">{product.daily_target}</td>
                   <td className="px-5 py-3 text-center">
@@ -125,14 +126,14 @@ export default function Products() {
                   <td className="px-5 py-3 text-right space-x-1">
                     <Button variant="ghost" size="sm" onClick={() => openEdit(product)}>Edit</Button>
                     {product.status !== 'CANCELLED' && (
-                      <Button variant="ghost" size="sm" className="text-defect-red hover:text-defect-red" onClick={() => handleCancel(product.product_id)}>Cancel</Button>
+                      <Button variant="ghost" size="sm" className="text-risk hover:text-risk" onClick={() => handleCancel(product.product_id)}>Cancel</Button>
                     )}
                   </td>
                 </tr>
               ))}
               {products.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-5 py-12 text-center text-sm text-cool-gray">No products found.</td>
+                  <td colSpan={7} className={table.empty}>No products found.</td>
                 </tr>
               )}
             </tbody>

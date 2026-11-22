@@ -1,12 +1,12 @@
+import { spinner } from '../../design';
+
 interface SpinnerProps {
-  size?: 'sm' | 'md' | 'lg';
+  size?: keyof typeof spinner.sizes;
   className?: string;
 }
 
-const sizeMap = { sm: 16, md: 24, lg: 36 };
-
 export default function Spinner({ size = 'md', className = '' }: SpinnerProps) {
-  const px = sizeMap[size];
+  const px = spinner.sizes[size];
   return (
     <svg
       className={`animate-spin ${className}`}

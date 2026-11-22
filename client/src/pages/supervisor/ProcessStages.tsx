@@ -4,6 +4,7 @@ import { postStage } from '../../api/stages';
 import { Button, Card } from '../../components/ui';
 import { useToast } from '../../components/ui/Toast';
 import { Save } from 'lucide-react';
+import { field, page } from '../../design';
 
 export default function ProcessStages() {
   const [products, setProducts] = useState<any[]>([]);
@@ -47,14 +48,14 @@ export default function ProcessStages() {
   };
 
   return (
-    <div className="p-4 lg:p-6 space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+    <div className={page.shell}>
+      <div className={page.header}>
         <div>
-          <h1 className="text-2xl lg:text-3xl font-bold text-ink">Process Stages</h1>
-          <p className="text-sm text-cool-gray mt-1">Log Cutting, Packing, and Ironing totals</p>
+          <h1 className={page.title}>Process Stages</h1>
+          <p className={page.subtitle}>Log Cutting, Packing, and Ironing totals</p>
         </div>
         <div className="flex items-center gap-2">
-          <input type="date" className="px-3 py-2 border border-linen rounded-lg text-sm bg-surface-raised focus:outline-none focus:ring-2 focus:ring-brand/40"
+          <input type="date" className={page.dateInput}
             value={selectedDate}
             onChange={e => setSelectedDate(e.target.value)} />
           <Button onClick={saveAll} disabled={saving} loading={saving}>
@@ -68,34 +69,34 @@ export default function ProcessStages() {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-linen text-left text-xs text-cool-gray uppercase tracking-wider bg-greige/50">
+              <tr className="border-b border-rule text-left text-[10px] text-muted uppercase tracking-[0.14em] bg-canvas/50">
                 <th className="px-5 py-3 font-medium">Product</th>
                 <th className="px-5 py-3 font-medium text-center">Cutting</th>
                 <th className="px-5 py-3 font-medium text-center">Ironing</th>
                 <th className="px-5 py-3 font-medium text-center">Packing</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-border">
+            <tbody className="divide-y divide-rule">
               {products.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="px-5 py-12 text-center text-sm text-cool-gray">No active products.</td>
+                  <td colSpan={4} className="px-5 py-12 text-center text-sm text-muted">No active products.</td>
                 </tr>
               ) : (
                 products.map((prod: any) => (
-                  <tr key={prod.product_id} className="hover:bg-greige transition-colors">
+                  <tr key={prod.product_id} className="hover:bg-paper/70 transition-colors">
                     <td className="px-5 py-3 font-medium text-ink">{prod.product_name}</td>
                     <td className="px-5 py-3 text-center">
-                      <input type="number" className="w-20 px-2 py-1.5 border border-linen rounded text-center text-sm focus:outline-none focus:ring-2 focus:ring-brand/40" placeholder="0"
+                      <input type="number" className={`w-20 ${field.compact}`} placeholder="0"
                         value={stages[prod.product_id]?.cutting ?? ''}
                         onChange={e => updateStage(prod.product_id, 'cutting', Number(e.target.value))} />
                     </td>
                     <td className="px-5 py-3 text-center">
-                      <input type="number" className="w-20 px-2 py-1.5 border border-linen rounded text-center text-sm focus:outline-none focus:ring-2 focus:ring-brand/40" placeholder="0"
+                      <input type="number" className={`w-20 ${field.compact}`} placeholder="0"
                         value={stages[prod.product_id]?.ironing ?? ''}
                         onChange={e => updateStage(prod.product_id, 'ironing', Number(e.target.value))} />
                     </td>
                     <td className="px-5 py-3 text-center">
-                      <input type="number" className="w-20 px-2 py-1.5 border border-linen rounded text-center text-sm focus:outline-none focus:ring-2 focus:ring-brand/40" placeholder="0"
+                      <input type="number" className={`w-20 ${field.compact}`} placeholder="0"
                         value={stages[prod.product_id]?.packing ?? ''}
                         onChange={e => updateStage(prod.product_id, 'packing', Number(e.target.value))} />
                     </td>

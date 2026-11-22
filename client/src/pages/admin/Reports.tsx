@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import ReportTable from '../../components/ReportTable';
 import { getDailyReport, getWeeklyReport, getCompanyReport } from '../../api/reports';
 import { Card } from '../../components/ui';
+import { page } from '../../design';
 
 type Tab = 'daily' | 'weekly' | 'company';
 
@@ -39,8 +40,8 @@ export default function Reports() {
   ];
 
   const renderContent = () => {
-    if (loading) return <p className="text-sm text-cool-gray text-center py-8">Loading...</p>;
-    if (!data) return <p className="text-sm text-cool-gray text-center py-8">No data available.</p>;
+    if (loading) return <p className="text-sm text-muted text-center py-8">Loading...</p>;
+    if (!data) return <p className="text-sm text-muted text-center py-8">No data available.</p>;
 
     if (tab === 'daily') {
       const total = (data as any)?.total;
@@ -49,17 +50,17 @@ export default function Reports() {
         <div className="space-y-6">
           {total && (
             <div className="grid grid-cols-3 gap-4">
-              <div className="bg-greige p-4 rounded-lg border border-linen">
-                <p className="text-sm text-cool-gray">Total Produced</p>
-                <p className="text-2xl font-bold text-ink">{total.total_produced?.toLocaleString()}</p>
+              <div className="bg-canvas p-4 rounded-lg border border-rule">
+                <p className="text-sm text-muted">Total Produced</p>
+                <p className="text-2xl font-serif text-ink">{total.total_produced?.toLocaleString()}</p>
               </div>
-              <div className="bg-greige p-4 rounded-lg border border-linen">
-                <p className="text-sm text-cool-gray">Total Target</p>
-                <p className="text-2xl font-bold text-ink">{total.total_target?.toLocaleString()}</p>
+              <div className="bg-canvas p-4 rounded-lg border border-rule">
+                <p className="text-sm text-muted">Total Target</p>
+                <p className="text-2xl font-serif text-ink">{total.total_target?.toLocaleString()}</p>
               </div>
-              <div className="bg-greige p-4 rounded-lg border border-linen">
-                <p className="text-sm text-cool-gray">Efficiency Rate</p>
-                <p className="text-2xl font-bold text-ink">{total.efficiency_pct}%</p>
+              <div className="bg-canvas p-4 rounded-lg border border-rule">
+                <p className="text-sm text-muted">Efficiency Rate</p>
+                <p className="text-2xl font-serif text-ink">{total.efficiency_pct}%</p>
               </div>
             </div>
           )}
@@ -117,27 +118,25 @@ export default function Reports() {
   };
 
   return (
-    <div className="p-4 lg:p-6 space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+    <div className={page.shell}>
+      <div className={page.header}>
         <div>
-          <h1 className="text-2xl lg:text-3xl font-bold text-ink">Production Reports</h1>
-          <p className="text-sm text-cool-gray mt-1">View daily, weekly, and company-wide production reports</p>
+          <h1 className={page.title}>Production Reports</h1>
+          <p className={page.subtitle}>View daily, weekly, and company-wide production reports</p>
         </div>
         <div className="flex items-center gap-2">
-          <input type="date" className="px-3 py-2 border border-linen rounded-lg text-sm bg-surface-raised focus:outline-none focus:ring-2 focus:ring-brand/40"
+          <input type="date" className={page.dateInput}
             value={selectedDate}
             onChange={e => setSelectedDate(e.target.value)} />
         </div>
       </div>
 
-      <div className="flex gap-1 border-b border-linen pb-1">
+      <div className={page.tabs}>
         {tabs.map(t => (
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
-            className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
-              tab === t.key ? 'bg-surface-raised border border-linen border-b-white text-brand-dark -mb-px' : 'text-cool-gray hover:text-ink'
-            }`}
+            className={`${page.tab} ${tab === t.key ? page.tabActive : page.tabIdle}`}
           >
             {t.label}
           </button>

@@ -1,394 +1,573 @@
 import { useState, useEffect } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
-  LineChart, Line, PieChart, Pie, Cell,
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
 } from 'recharts';
+import {
+  AlertTriangle, ArrowDownRight, ArrowRight, ArrowUpRight, CalendarDays,
+  ClipboardList, Minus, RefreshCw,
+} from 'lucide-react';
 import { getLines, getLineCurrent } from '../../api/lines';
 import { getDailyReport } from '../../api/reports';
 import { getQuality } from '../../api/quality';
 import { getStagesSummary } from '../../api/stages';
 import { getHourlyProduction } from '../../api/production';
 import { getBranches, getBranchSummary } from '../../api/branches';
-import { Badge } from '../../components/ui';
-import Card from '../../components/ui/Card';
-import { SkeletonCard } from '../../components/ui/Skeleton';
-import {
-  TrendingUp, Target, Activity, LayoutDashboard, RefreshCw,
-} from 'lucide-react';
-
-const COLORS = ['#6366f1', '#22c55e', '#f59e0b', '#ef4444', '#3b82f6', '#8b5cf6', '#ec4899', '#14b8a6'];
+import Skeleton from '../../components/ui/Skeleton';
+import { formatDateLong, toISODate } from '../../lib/date';
+import { chart, qualityTone, segmented, statusFor, toneFor, tones } from '../../design';
 
 const stagesName: Record<string, string> = { CUTTING: 'Cutting', PACKING: 'Packing', IRONING: 'Ironing' };
 
+function SignalBars({ pct }: { pct: number | null }) {
+  const tone = toneFor(pct);
+  const filled = pct === null ? 0 : Math.max(0, Math.min(5, Math.round(pct / 20)));
+  return (
+    <div className="flex items-end gap-[2px]" aria-hidden="true">
+      {[1, 2, 3, 4, 5].map(i => (
+        <span
+          key={i}
+          className={`w-[3px] rounded-sm ${i <= filled ? tones[tone].dot : 'bg-rule'}`}
+          style={{ height: 4 + i * 2 }}
+        />
+      ))}
+    </div>
+  );
+}
+
+const initials = (name?: string) =>
+  (name || '—')
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map(w => w[0]?.toUpperCase())
+    .join('') || '—';
+
 export default function Dashboard() {
+  const [searchParams] = useSearchParams();
+  const dateParam = searchParams.get('date');
+
   const [lines, setLines] = useState<any[]>([]);
   const [summary, setSummary] = useState<any>(null);
   const [qualityData, setQualityData] = useState<any[]>([]);
   const [stagesData, setStagesData] = useState<any[]>([]);
   const [branchesData, setBranchesData] = useState<any[]>([]);
-  const [hourlyData, setHourlyData] = useState<any[]>([]);
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [hourlyData, setHourlyData] = useState<any[]>(
+    Array.from({ length: 12 }, (_, i) => ({ hour: `H${i + 1}`, produced: 0 }))
+  );
+  const [selectedDate, setSelectedDate] = useState(dateParam || toISODate(new Date()));
   const [loading, setLoading] = useState(true);
+  const [tableFilter, setTableFilter] = useState<'all' | 'behind' | 'on-target'>('all');
+
+  useEffect(() => {
+    if (dateParam) setSelectedDate(dateParam);
+  }, [dateParam]);
 
   const fetchData = async (date: string) => {
     setLoading(true);
-    const [reportRes, linesRes, qualityRes, stagesRes, hourlyRes] = await Promise.all([
-      getDailyReport(date),
-      getLines(),
-      getQuality({ date }),
-      getStagesSummary({ date }),
-      getHourlyProduction(date),
-    ]);
-    if (qualityRes.success) setQualityData(qualityRes.data);
-    if (stagesRes.success) setStagesData(stagesRes.data);
-    if (hourlyRes.success) {
-      const grouped: Record<number, number> = {};
-      for (const r of hourlyRes.data || []) {
-        grouped[r.hour_number] = (grouped[r.hour_number] || 0) + (r.qty_produced || 0);
-      }
-      setHourlyData(
-        Array.from({ length: 12 }, (_, i) => ({
-          hour: `H${i + 1}`,
-          produced: grouped[i + 1] || 0,
-        }))
-      );
-    }
-    if (reportRes.success) setSummary(reportRes.data);
-    if (!linesRes.success) { setLoading(false); return; }
+    try {
+      const [reportRes, linesRes, qualityRes, stagesRes, hourlyRes] = await Promise.all([
+        getDailyReport(date),
+        getLines(),
+        getQuality({ date }),
+        getStagesSummary({ date }),
+        getHourlyProduction(date),
+      ]);
 
-    const byLine = (reportRes.data?.by_line || []) as any[];
-
-    const enriched = await Promise.all(
-      linesRes.data.map(async (line: any) => {
-        const lineSummary = byLine.find((l: any) => l.line_id === line.line_id);
-        try {
-          const current = await getLineCurrent(line.line_id);
-          const assign = current.data;
-          return {
-            id: line.line_id,
-            name: line.line_name,
-            product: assign.product_name,
-            customer: assign.customer_name,
-            produced: lineSummary?.total_produced ?? 0,
-            target: assign.daily_target,
-            defects: lineSummary?.total_defect ?? 0,
-            status: line.status,
-          };
-        } catch {
-          return {
-            id: line.line_id,
-            name: line.line_name,
-            product: 'No active assignment',
-            customer: '-',
-            produced: lineSummary?.total_produced ?? 0,
-            target: 0,
-            defects: 0,
-            status: line.status,
-          };
+      if (qualityRes.success) setQualityData(qualityRes.data || []);
+      if (stagesRes.success) setStagesData(stagesRes.data || []);
+      if (hourlyRes.success) {
+        const grouped: Record<number, number> = {};
+        for (const r of hourlyRes.data || []) {
+          grouped[r.hour_number] = (grouped[r.hour_number] || 0) + (r.qty_produced || 0);
         }
-      })
-    );
-    setLines(enriched);
+        setHourlyData(
+          Array.from({ length: 12 }, (_, i) => ({
+            hour: `H${i + 1}`,
+            produced: grouped[i + 1] || 0,
+          }))
+        );
+      }
+      if (reportRes.success) setSummary(reportRes.data);
+      if (!linesRes.success) return;
 
-    const branchesRes = await getBranches();
-    if (branchesRes.success) {
-      const summaries = await Promise.all(
-        branchesRes.data.map(async (branch: any) => {
+      const byLine = (reportRes.data?.by_line || []) as any[];
+
+      const enriched = await Promise.all(
+        linesRes.data.map(async (line: any) => {
+          const lineSummary = byLine.find((l: any) => l.line_id === line.line_id);
           try {
-            const s = await getBranchSummary(branch.branch_id);
-            const latest = s.data?.[0];
+            const current = await getLineCurrent(line.line_id);
+            const assign = current.data;
             return {
-              branch: branch.branch_name,
-              target: latest?.daily_target ?? 0,
-              actual: latest?.qty_produced ?? 0,
-              diff: (latest?.qty_produced ?? 0) - (latest?.daily_target ?? 0),
+              id: line.line_id,
+              name: line.line_name,
+              product: assign.product_name,
+              customer: assign.customer_name,
+              produced: lineSummary?.total_produced ?? 0,
+              target: assign.daily_target,
+              defects: lineSummary?.total_defect ?? 0,
+              status: line.status,
             };
           } catch {
-            return { branch: branch.branch_name, target: 0, actual: 0, diff: 0 };
+            return {
+              id: line.line_id,
+              name: line.line_name,
+              product: 'No active assignment',
+              customer: '—',
+              produced: lineSummary?.total_produced ?? 0,
+              target: 0,
+              defects: 0,
+              status: line.status,
+            };
           }
         })
       );
-      setBranchesData(summaries);
+      setLines(enriched);
+
+      const branchesRes = await getBranches();
+      if (branchesRes.success) {
+        const summaries = await Promise.all(
+          branchesRes.data.map(async (branch: any) => {
+            try {
+              const s = await getBranchSummary(branch.branch_id);
+              const latest = s.data?.[0];
+              return {
+                branch: branch.branch_name,
+                target: latest?.daily_target ?? 0,
+                actual: latest?.qty_produced ?? 0,
+                diff: (latest?.qty_produced ?? 0) - (latest?.daily_target ?? 0),
+              };
+            } catch {
+              return { branch: branch.branch_name, target: 0, actual: 0, diff: 0 };
+            }
+          })
+        );
+        setBranchesData(summaries);
+      }
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   useEffect(() => {
     fetchData(selectedDate);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDate]);
 
   const totalProduced = summary?.total?.total_produced ?? 0;
   const totalTarget = summary?.total?.total_assigned_target ?? summary?.total?.total_target ?? 0;
+  const totalDefects = summary?.total?.total_defect ?? 0;
   const efficiency = totalTarget > 0 ? Math.round((totalProduced / totalTarget) * 100) : 0;
   const activeLines = lines.filter(l => l.status === 'ACTIVE').length;
 
-  const stagesSummary = (stage: string) => {
-    const items = stagesData.filter((s: any) => s.stage === stage);
-    return items.reduce((sum: number, s: any) => sum + (s.qty_completed || 0), 0);
-  };
+  const assignedLines = lines.filter(l => l.target > 0);
+  const attention = assignedLines
+    .filter(l => l.produced < l.target)
+    .sort((a, b) => a.produced / a.target - b.produced / b.target);
+  const unassigned = lines.length - assignedLines.length;
 
-  const barData = lines.filter(l => l.target > 0).slice(0, 20);
+  const hoursLogged = hourlyData.filter(h => h.produced > 0).length;
+  const shiftTotal = hourlyData.reduce((sum, h) => sum + h.produced, 0);
+  const peakHour = Math.max(...hourlyData.map(h => h.produced), 1);
 
-  const qualityPie = qualityData.map((q: any, i: number) => ({
-    name: q.customer_name,
-    value: q.pcs_checked || 0,
-    color: COLORS[i % COLORS.length],
-  }));
+  const qChecked = qualityData.reduce((sum, q) => sum + (q.pcs_checked || 0), 0);
+  const qFaults = qualityData.reduce((sum, q) => sum + (q.pcs_faults || 0), 0);
+  const passRate = qChecked > 0 ? Math.round(((qChecked - qFaults) / qChecked) * 100) : null;
 
-  const stagesChartData = ['CUTTING', 'PACKING', 'IRONING'].map(s => ({
+  const stagesSummary = (stage: string) =>
+    stagesData
+      .filter((s: any) => s.stage === stage)
+      .reduce((sum: number, s: any) => sum + (s.qty_completed || 0), 0);
+
+  const stagesChartData = ['CUTTING', 'IRONING', 'PACKING'].map(s => ({
     name: stagesName[s],
     completed: stagesSummary(s),
   }));
+  const stageMax = Math.max(...stagesChartData.map(s => s.completed), 1);
+
+  const pctOf = (line: any) => (line.target > 0 ? Math.round((line.produced / line.target) * 100) : null);
+  const needsPerHour = (line: any) =>
+    Math.ceil(Math.max(0, line.target - line.produced) / Math.max(1, 12 - hoursLogged));
+
+  const sortedLines = [...lines].sort((a, b) => {
+    const aPct = a.target > 0 ? a.produced / a.target : 2;
+    const bPct = b.target > 0 ? b.produced / b.target : 2;
+    return aPct - bPct;
+  });
+
+  const visibleLines = sortedLines.filter(line => {
+    if (tableFilter === 'behind') return line.target > 0 && line.produced < line.target;
+    if (tableFilter === 'on-target') return line.target > 0 && line.produced >= line.target;
+    return true;
+  });
+
+  const quietStats = [
+    { label: 'Efficiency', value: `${efficiency}%`, sub: 'of daily target' },
+    { label: 'Lines running', value: `${activeLines}`, sub: `of ${lines.length} total` },
+    { label: 'Defects logged', value: totalDefects.toLocaleString(), sub: 'units today' },
+    { label: 'Quality pass', value: passRate === null ? '—' : `${passRate}%`, sub: 'across customers' },
+  ];
+
+  const heroBars = hourlyData.map(h => ({ hour: h.hour, produced: h.produced }));
 
   return (
-    <div className="p-4 lg:p-6 space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+    <div className="mx-auto max-w-[1440px] space-y-9 px-4 py-6 lg:px-8 lg:py-8">
+      {/* Headline — answers the question the page exists to answer */}
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-2xl lg:text-3xl font-bold text-ink">Dashboard</h1>
-          <p className="text-sm text-cool-gray mt-1">
-            Production overview for <span className="font-medium text-slate">{new Date(selectedDate).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
+          <p className="flex items-center gap-1.5 text-[11px] uppercase tracking-[0.18em] text-muted">
+            <CalendarDays size={12} />
+            Floor overview · {formatDateLong(selectedDate)}
+          </p>
+          <h1 className="mt-2 max-w-3xl font-serif text-[34px] leading-[1.08] tracking-[-0.01em] text-ink sm:text-[42px]">
+            {loading && lines.length === 0 ? (
+              <span className="text-muted">Reading today’s floor…</span>
+            ) : attention.length > 0 ? (
+              <>
+                <span className="relative whitespace-nowrap">
+                  <span className="relative z-10">
+                    {attention.length} {attention.length === 1 ? 'line needs' : 'lines need'}
+                  </span>
+                  <span className="absolute inset-x-0 bottom-1 z-0 h-3 bg-lime/70" />
+                </span>{' '}
+                <em className="italic">attention</em> before the shift ends.
+              </>
+            ) : (
+              <>
+                Every line is <em className="italic">on target</em> today.
+              </>
+            )}
+          </h1>
+          <p className="mt-2 text-sm text-ink-soft">
+            {formatDateLong(selectedDate)} · {activeLines} lines running · {hoursLogged} of 12 hours logged
+            {unassigned > 0 ? ` · ${unassigned} unassigned` : ''}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <input type="date" className="px-3 py-2 border border-linen rounded-lg text-sm bg-surface-raised focus:outline-none focus:ring-2 focus:ring-brand/40"
+
+        <div className="flex shrink-0 items-center gap-2">
+          <input
+            type="date"
             value={selectedDate}
-            onChange={e => setSelectedDate(e.target.value)} />
-          <button onClick={() => fetchData(selectedDate)} className="p-2 text-cool-gray hover:text-brand-dark hover:bg-brand-light rounded-lg transition-colors">
-            <RefreshCw size={18} />
+            onChange={e => setSelectedDate(e.target.value)}
+            className="h-9 rounded-lg border border-rule bg-paper px-3 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-ink/10"
+          />
+          <button
+            onClick={() => fetchData(selectedDate)}
+            className="flex h-9 w-9 items-center justify-center rounded-lg border border-rule bg-paper text-ink-soft transition-colors hover:bg-raw-cotton hover:text-ink"
+            aria-label="Refresh dashboard"
+          >
+            <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
           </button>
         </div>
-      </div>
+      </header>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card>
-          <div className="flex items-center gap-2 text-xs text-cool-gray uppercase tracking-wider mb-1 font-sans">
-            <TrendingUp size={14} className="text-brand" />
-            <span>Total Produced</span>
-          </div>
-          <p className="text-[32px] font-medium font-mono text-ink leading-tight">{totalProduced.toLocaleString()}</p>
-        </Card>
-        <Card>
-          <div className="flex items-center gap-2 text-xs text-cool-gray uppercase tracking-wider mb-1 font-sans">
-            <Target size={14} className="text-loom-green" />
-            <span>Total Target</span>
-          </div>
-          <p className="text-[32px] font-medium font-mono text-ink leading-tight">{totalTarget.toLocaleString()}</p>
-        </Card>
-        <Card>
-          <div className="flex items-center gap-2 text-xs text-cool-gray uppercase tracking-wider mb-1 font-sans">
-            <Activity size={14} className="text-caution-amber" />
-            <span>Efficiency Rate</span>
-          </div>
-          <p className={`text-[32px] font-medium font-mono leading-tight ${
-            efficiency >= 100 ? 'text-loom-green' : efficiency >= 70 ? 'text-caution-amber' : 'text-defect-red'
-          }`}>
-            {efficiency}%
-          </p>
-        </Card>
-        <Card>
-          <div className="flex items-center gap-2 text-xs text-cool-gray uppercase tracking-wider mb-1 font-sans">
-            <LayoutDashboard size={14} className="text-brand" />
-            <span>Active Lines</span>
-          </div>
-          <p className="text-[32px] font-medium font-mono text-ink leading-tight">
-            {activeLines}<span className="text-lg text-cool-gray font-normal font-sans"> / {lines.length}</span>
-          </p>
-        </Card>
-      </div>
-
-      {loading ? (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <SkeletonCard /><SkeletonCard />
+      {loading && lines.length === 0 ? (
+        <div className="grid gap-5 lg:grid-cols-5">
+          <Skeleton variant="rect" className="h-80 rounded-2xl lg:col-span-3" />
+          <Skeleton variant="rect" className="h-80 rounded-2xl lg:col-span-2" />
         </div>
       ) : (
         <>
-          {/* Charts Row */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Production by Line */}
-            <Card header={<h3 className="font-semibold text-ink">Production by Line</h3>}>
-              {barData.length === 0 ? (
-                <p className="text-sm text-cool-gray text-center py-8">No production data for this date.</p>
-              ) : (
-                <div className="h-72">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={barData} margin={{ top: 8, right: 8, bottom: 0, left: -8 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                      <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                      <YAxis tick={{ fontSize: 12 }} />
-                      <Tooltip
-                        contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.08)' }}
-                      />
-                      <Legend />
-                      <Bar dataKey="produced" name="Produced" fill="#6366f1" radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="target" name="Target" fill="#c7d2fe" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
+          {/* Dark hero + today's focus. The only dark surface on the page. */}
+          <div className="grid gap-5 lg:grid-cols-5">
+            <section className="relative overflow-hidden rounded-2xl bg-carbon p-6 text-white lg:col-span-3 lg:p-7">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.18em] text-white/45">Units produced today</p>
+                  <div className="mt-3 flex flex-wrap items-end gap-x-3 gap-y-1">
+                    <span className="font-serif text-6xl leading-none tabular-nums text-lime lg:text-7xl">
+                      {totalProduced.toLocaleString()}
+                    </span>
+                    <span className="mb-2 text-sm text-white/50">
+                      of {totalTarget.toLocaleString()} target
+                    </span>
+                  </div>
                 </div>
-              )}
-            </Card>
-
-            {/* Hourly Trend */}
-            <Card header={<h3 className="font-semibold text-ink">Hourly Production Trend</h3>}>
-              {hourlyData.every(d => d.produced === 0) ? (
-                <p className="text-sm text-cool-gray text-center py-8">No hourly data for this date.</p>
-              ) : (
-                <div className="h-72">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={hourlyData} margin={{ top: 8, right: 8, bottom: 0, left: -8 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                      <XAxis dataKey="hour" tick={{ fontSize: 12 }} />
-                      <YAxis tick={{ fontSize: 12 }} />
-                      <Tooltip
-                        contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.08)' }}
-                      />
-                      <Line type="monotone" dataKey="produced" stroke="#6366f1" strokeWidth={2} dot={{ fill: '#6366f1', r: 3 }} activeDot={{ r: 5 }} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-              )}
-            </Card>
-          </div>
-
-          {/* Second row */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Process Stages */}
-            <Card header={<h3 className="font-semibold text-ink">Process Stages</h3>}>
-              {stagesChartData.every(d => d.completed === 0) ? (
-                <p className="text-sm text-cool-gray text-center py-8">No stage data.</p>
-              ) : (
-                <div className="h-56">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={stagesChartData} layout="vertical" margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" horizontal={false} />
-                      <XAxis type="number" tick={{ fontSize: 12 }} />
-                      <YAxis type="category" dataKey="name" tick={{ fontSize: 12 }} width={80} />
-                      <Tooltip
-                        contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0' }}
-                      />
-                      <Bar dataKey="completed" name="Completed" fill="#6366f1" radius={[0, 4, 4, 0]} barSize={24} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              )}
-            </Card>
-
-            {/* Quality Overview */}
-            <Card header={<h3 className="font-semibold text-ink">Quality Overview</h3>}>
-              {qualityPie.length === 0 ? (
-                <p className="text-sm text-cool-gray text-center py-8">No quality data.</p>
-              ) : (
-                <div className="h-56 flex items-center justify-center">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie data={qualityPie} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={2} dataKey="value">
-                        {qualityPie.map((entry, i) => (
-                          <Cell key={i} fill={entry.color} />
-                        ))}
-                      </Pie>
-                      <Tooltip
-                        contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0' }}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-              )}
-              {qualityPie.length > 0 && (
-                <div className="flex flex-wrap gap-3 mt-2 justify-center">
-                  {qualityPie.map((q, i) => (
-                    <div key={i} className="flex items-center gap-1.5 text-xs text-slate">
-                      <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: q.color }} />
-                      {q.name}: {q.value.toLocaleString()}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </Card>
-          </div>
-
-          {/* Branch Summary */}
-          <Card header={
-            <div className="flex items-center justify-between">
-              <h3 className="font-semibold text-ink">Branch Summary</h3>
-              <Badge status="on_target" size="sm">{branchesData.length} branches</Badge>
-            </div>
-          }>
-            {branchesData.length === 0 ? (
-              <p className="text-sm text-cool-gray text-center py-4">No branch data.</p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-linen text-left text-xs text-cool-gray uppercase tracking-wider">
-                      <th className="pb-2 pr-4 font-medium">Branch</th>
-                      <th className="pb-2 pr-4 font-medium text-right">Target</th>
-                      <th className="pb-2 pr-4 font-medium text-right">Produced</th>
-                      <th className="pb-2 font-medium text-right">Difference</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border">
-                    {branchesData.map((b: any) => (
-                      <tr key={b.branch} className="hover:bg-greige transition-colors">
-                        <td className="py-2.5 pr-4 font-medium text-ink">{b.branch}</td>
-                        <td className="py-2.5 pr-4 text-right text-slate">{b.target.toLocaleString()}</td>
-                        <td className="py-2.5 pr-4 text-right text-slate">{b.actual.toLocaleString()}</td>
-                        <td className={`py-2.5 text-right font-medium ${b.diff < 0 ? 'text-defect-red' : 'text-loom-green'}`}>
-                          {b.diff > 0 ? '+' : ''}{b.diff.toLocaleString()}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <span className="rounded-full border border-white/15 px-2.5 py-1 font-mono text-[11px] text-white/60">
+                  {efficiency}%
+                </span>
               </div>
-            )}
-          </Card>
 
-          {/* Production Lines */}
-          <Card header={
-            <div className="flex items-center justify-between">
-              <h3 className="font-semibold text-ink">Production Lines</h3>
-              <Badge status="on_target" size="sm">{activeLines} active</Badge>
+              <div className="mt-5 h-1.5 overflow-hidden rounded-full bg-white/10">
+                <div
+                  className="h-full rounded-full bg-lime transition-all duration-500"
+                  style={{ width: `${Math.min(100, efficiency)}%` }}
+                />
+              </div>
+              <div className="mt-2 flex items-center justify-between text-[11px] text-white/45">
+                <span>{totalDefects.toLocaleString()} defects logged</span>
+                <span>{Math.max(0, totalTarget - totalProduced).toLocaleString()} units to target</span>
+              </div>
+
+              <div className="mt-6 h-24">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={heroBars} margin={{ top: 4, right: 0, bottom: 0, left: 0 }}>
+                    <XAxis dataKey="hour" hide />
+                    <YAxis hide />
+                    <Tooltip cursor={{ fill: chart.heroCursor }} {...chart.heroTooltip} />
+                    <Bar dataKey="produced" name="Units" fill={chart.heroBar} radius={chart.barRadius} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="mt-2 flex justify-between text-[10px] uppercase tracking-[0.14em] text-white/35">
+                <span>Hr 1</span>
+                <span>Shift runway · {hoursLogged}/12 hours</span>
+                <span>Hr 12</span>
+              </div>
+            </section>
+
+            {/* Today's focus — delivers on the headline */}
+            <aside className="flex flex-col rounded-2xl border border-rule bg-paper p-5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle size={15} className="text-risk" />
+                  <h2 className="font-serif text-xl text-ink">Today’s focus</h2>
+                </div>
+                <span className="text-[11px] uppercase tracking-[0.14em] text-muted">
+                  {attention.length} behind
+                </span>
+              </div>
+
+              <div className="mt-4 flex-1 space-y-2.5">
+                {attention.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-rule p-4">
+                    <p className="text-sm text-ink-soft">
+                      Nothing is behind target. Keep the pace and log each hour as it closes.
+                    </p>
+                  </div>
+                ) : (
+                  attention.slice(0, 3).map(line => {
+                    const pct = pctOf(line);
+                    const health = statusFor(pct);
+                    return (
+                      <div key={line.id} className="rounded-xl border border-rule bg-surface-raised p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-medium text-ink">
+                              {line.name} · {line.product}
+                            </p>
+                            <p className="mt-0.5 truncate text-[11px] text-muted">
+                              {line.customer} · {(line.target - line.produced).toLocaleString()} short ·
+                              needs {needsPerHour(line)}/hr
+                            </p>
+                          </div>
+                          <div
+                            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-lime-soft text-[11px] font-semibold text-lime-deep"
+                            title={line.customer}
+                          >
+                            {initials(line.customer)}
+                          </div>
+                        </div>
+                        <div className="mt-2.5 flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <SignalBars pct={pct} />
+                            <span className={`text-[11px] font-medium ${health.text}`}>
+                              {pct}% · {health.label}
+                            </span>
+                          </div>
+                          <Link
+                            to="/entry"
+                            className="inline-flex items-center gap-1 text-[11px] font-medium text-ink-soft transition-colors hover:text-ink"
+                          >
+                            Log hours <ArrowRight size={12} />
+                          </Link>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+                {attention.length > 3 && (
+                  <p className="px-1 text-[11px] text-muted">
+                    +{attention.length - 3} more lines behind target
+                  </p>
+                )}
+              </div>
+
+              <Link
+                to="/entry"
+                className="mt-4 inline-flex items-center gap-1.5 text-xs font-medium text-ink transition-colors hover:text-lime-deep"
+              >
+                <ClipboardList size={13} /> Open hourly entry
+              </Link>
+            </aside>
+          </div>
+
+          {/* Quiet stat row — deliberately smaller than the hero */}
+          <div className="grid grid-cols-2 border-y border-rule md:grid-cols-4">
+            {quietStats.map((stat, i) => (
+              <div
+                key={stat.label}
+                className={`px-4 py-4 ${i % 2 === 1 ? 'border-l border-rule' : ''} ${
+                  i >= 2 ? 'border-t border-rule md:border-t-0' : ''
+                } ${i > 0 ? 'md:border-l md:border-rule' : ''}`}
+              >
+                <p className="text-[10px] uppercase tracking-[0.16em] text-muted">{stat.label}</p>
+                <p className="mt-1 font-serif text-2xl leading-none tabular-nums text-ink">{stat.value}</p>
+                <p className="mt-1 text-[11px] text-muted">{stat.sub}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Shift runway — one detail only this product would have */}
+          <section className="space-y-4">
+            <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-end">
+              <div>
+                <h2 className="font-serif text-2xl text-ink">Shift runway</h2>
+                <p className="text-sm text-ink-soft">Output by hour · dot size shows units logged</p>
+              </div>
+              <p className="text-sm text-ink-soft">
+                <span className="font-serif text-xl tabular-nums text-ink">{shiftTotal.toLocaleString()}</span>{' '}
+                units across {hoursLogged} of 12 hours
+              </p>
             </div>
-          } padding="none">
-            {lines.length === 0 ? (
-              <p className="text-sm text-cool-gray text-center py-8">No lines configured.</p>
+
+            <div className="overflow-x-auto rounded-2xl border border-rule bg-paper px-4 pb-4 pt-6">
+              <div className="relative min-w-[540px]">
+                <div className="absolute left-0 right-0 top-[22px] h-px bg-rule" />
+                <div className="relative grid grid-cols-12">
+                  {hourlyData.map((h, i) => {
+                    const size = h.produced > 0 ? 10 + Math.round((h.produced / peakHour) * 24) : 8;
+                    return (
+                      <div key={h.hour} className="flex flex-col items-center gap-2.5">
+                        <div className="flex h-11 w-full items-center justify-center">
+                          <span
+                            className={
+                              h.produced > 0
+                                ? 'rounded-full border border-lime-deep/20 bg-lime'
+                                : 'rounded-full border border-rule bg-paper'
+                            }
+                            style={{ width: size, height: size }}
+                            title={`${h.hour}: ${h.produced.toLocaleString()} units`}
+                          />
+                        </div>
+                        <span className={`font-mono text-[11px] ${h.produced > 0 ? 'text-ink' : 'text-muted'}`}>
+                          {h.produced > 0 ? h.produced.toLocaleString() : '—'}
+                        </span>
+                        <span className="text-[10px] uppercase tracking-[0.12em] text-muted">
+                          H{i + 1}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {unassigned > 0 && (
+              <p className={`flex items-center gap-1.5 text-xs ${tones.behind.text}`}>
+                <AlertTriangle size={12} />
+                {unassigned} {unassigned === 1 ? 'line has' : 'lines have'} no active assignment — there is
+                nothing to log against until one is assigned.
+              </p>
+            )}
+          </section>
+
+          {/* Line table — no box, sorted by urgency */}
+          <section>
+            <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
+              <div>
+                <h2 className="font-serif text-2xl text-ink">Line performance</h2>
+                <p className="text-sm text-ink-soft">Most at-risk line first</p>
+              </div>
+              <div className={segmented.pillGroup}>
+                {([
+                  ['all', 'All'],
+                  ['behind', 'Behind'],
+                  ['on-target', 'On target'],
+                ] as const).map(([value, label]) => (
+                  <button
+                    key={value}
+                    onClick={() => setTableFilter(value)}
+                    className={`${segmented.pillItem} ${
+                      tableFilter === value ? segmented.pillActive : segmented.pillIdle
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {visibleLines.length === 0 ? (
+              <p className="mt-6 rounded-xl border border-dashed border-rule px-4 py-8 text-center text-sm text-muted">
+                No lines match this filter.
+              </p>
             ) : (
-              <div className="overflow-x-auto">
+              <div className="mt-4 overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-linen text-left text-xs text-cool-gray uppercase tracking-wider bg-greige/50">
-                      <th className="px-5 py-3 font-medium">Line</th>
-                      <th className="px-5 py-3 font-medium">Product / Customer</th>
-                      <th className="px-5 py-3 font-medium text-right">Produced</th>
-                      <th className="px-5 py-3 font-medium text-right">Target</th>
-                      <th className="px-5 py-3 font-medium text-right">%</th>
-                      <th className="px-5 py-3 font-medium text-right">Defects</th>
-                      <th className="px-5 py-3 font-medium text-right">Status</th>
+                    <tr className="border-b border-rule text-left text-[10px] uppercase tracking-[0.14em] text-muted">
+                      <th className="pb-2 pr-4 font-medium">Line</th>
+                      <th className="pb-2 pr-4 font-medium">Buyer / style</th>
+                      <th className="pb-2 pr-4 font-medium">Health</th>
+                      <th className="pb-2 pr-4 text-right font-medium">Produced</th>
+                      <th className="pb-2 pr-4 text-right font-medium">%</th>
+                      <th className="pb-2 pr-4 text-right font-medium">Gap</th>
+                      <th className="pb-2 text-right font-medium">Action</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-border">
-                    {lines.map(line => {
-                      const pct = line.target > 0 ? Math.round((line.produced / line.target) * 100) : 0;
+                  <tbody>
+                    {visibleLines.map(line => {
+                      const pct = pctOf(line);
+                      const health = statusFor(pct);
+                      const tone = toneFor(pct);
+                      const Trend =
+                        tone === 'idle' ? Minus : tone === 'onTarget' ? ArrowUpRight : tone === 'atRisk' ? Minus : ArrowDownRight;
+                      const gap = line.target > 0 ? line.produced - line.target : null;
                       return (
-                        <tr key={line.id} className="hover:bg-greige transition-colors">
-                          <td className="px-5 py-3 font-medium text-ink">{line.name}</td>
-                          <td className="px-5 py-3 text-slate">
-                            <span className="block truncate max-w-40">{line.product}</span>
-                            <span className="text-xs text-cool-gray">{line.customer}</span>
+                        <tr key={line.id} className="border-b border-rule/70 transition-colors last:border-0 hover:bg-paper/70">
+                          <td className="py-3 pr-4">
+                            <div className="flex items-center gap-2">
+                              <span className={`h-1.5 w-1.5 rounded-full ${health.dot}`} />
+                              <span className="font-medium text-ink">{line.name}</span>
+                            </div>
+                            <p className="mt-0.5 max-w-[180px] truncate pl-3.5 text-[11px] text-muted">
+                              {line.customer}
+                            </p>
                           </td>
-                          <td className="px-5 py-3 text-right font-medium">{line.produced.toLocaleString()}</td>
-                          <td className="px-5 py-3 text-right text-slate">{line.target.toLocaleString()}</td>
-                          <td className="px-5 py-3 text-right">
-                            <span className={`font-medium ${pct >= 90 ? 'text-loom-green' : pct >= 70 ? 'text-caution-amber' : 'text-defect-red'}`}>
-                              {pct}%
+                          <td className="py-3 pr-4">
+                            <p className="max-w-[240px] truncate text-sm text-ink-soft">{line.product}</p>
+                            <p className="text-[11px] text-muted">{line.status}</p>
+                          </td>
+                          <td className="py-3 pr-4">
+                            <div className="flex items-center gap-2">
+                              <SignalBars pct={pct} />
+                              <span className={`text-[11px] font-medium ${health.text}`}>{health.label}</span>
+                            </div>
+                          </td>
+                          <td className="py-3 pr-4 text-right">
+                            <span className="font-mono text-sm tabular-nums text-ink">
+                              {line.produced.toLocaleString()}
+                            </span>
+                            <span className="font-mono text-[11px] text-muted">
+                              {' '}/ {line.target.toLocaleString()}
                             </span>
                           </td>
-                          <td className="px-5 py-3 text-right text-slate">{line.defects}</td>
-                          <td className="px-5 py-3 text-right">
-                            <Badge status={line.status === 'ACTIVE' ? 'on_target' : line.status === 'MAINTENANCE' ? 'warning' : 'default'} size="sm">
-                              {line.status}
-                            </Badge>
+                          <td className="py-3 pr-4 text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              <Trend size={13} className={health.text} />
+                              <span className={`font-mono text-sm tabular-nums ${health.text}`}>
+                                {pct === null ? '—' : `${pct}%`}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="py-3 pr-4 text-right font-mono text-sm tabular-nums">
+                            {gap === null ? (
+                              <span className="text-muted">—</span>
+                            ) : gap >= 0 ? (
+                              <span className="text-lime-deep">+{gap.toLocaleString()}</span>
+                            ) : (
+                              <span className="text-risk">−{Math.abs(gap).toLocaleString()}</span>
+                            )}
+                          </td>
+                          <td className="py-3 text-right">
+                            <Link
+                              to="/entry"
+                              className="inline-flex items-center gap-1 text-[11px] font-medium text-muted transition-colors hover:text-ink"
+                            >
+                              Log <ArrowUpRight size={12} />
+                            </Link>
                           </td>
                         </tr>
                       );
@@ -397,43 +576,93 @@ export default function Dashboard() {
                 </table>
               </div>
             )}
-          </Card>
+            <p className="mt-3 text-[11px] text-muted">
+              Showing {visibleLines.length} of {lines.length} lines · sorted by gap to target
+            </p>
+          </section>
 
-          {/* Quality Table */}
-          {qualityData.length > 0 && (
-            <Card header={<h3 className="font-semibold text-ink">Quality Control Details</h3>} padding="none">
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-linen text-left text-xs text-cool-gray uppercase tracking-wider bg-greige/50">
-                      <th className="px-5 py-3 font-medium">Customer</th>
-                      <th className="px-5 py-3 font-medium text-right">Checked</th>
-                      <th className="px-5 py-3 font-medium text-right">Faults</th>
-                      <th className="px-5 py-3 font-medium text-right">Passed</th>
-                      <th className="px-5 py-3 font-medium text-right">Pass Rate</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border">
-                    {qualityData.map((q: any) => {
-                      const ok = q.pcs_checked - q.pcs_faults;
-                      const rate = q.pcs_checked > 0 ? ((ok / q.pcs_checked) * 100).toFixed(1) : '0';
-                      return (
-                        <tr key={q.check_id || q.customer_id} className="hover:bg-greige transition-colors">
-                          <td className="px-5 py-3 font-medium text-ink">{q.customer_name}</td>
-                          <td className="px-5 py-3 text-right">{q.pcs_checked.toLocaleString()}</td>
-                          <td className="px-5 py-3 text-right text-defect-red font-medium">{q.pcs_faults}</td>
-                          <td className="px-5 py-3 text-right">{ok.toLocaleString()}</td>
-                          <td className="px-5 py-3 text-right">
-                            <Badge status={Number(rate) >= 95 ? 'on_target' : Number(rate) >= 80 ? 'warning' : 'critical'}>{rate}%</Badge>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+          {/* Lower detail — branch, quality, stages as plain lists */}
+          <div className="grid gap-8 lg:grid-cols-3">
+            <section>
+              <h2 className="font-serif text-xl text-ink">By branch</h2>
+              <ul className="mt-3 border-t border-rule">
+                {branchesData.length === 0 ? (
+                  <li className="py-4 text-sm text-muted">No branch data for this date.</li>
+                ) : (
+                  branchesData.map(b => (
+                    <li key={b.branch} className="flex items-center justify-between gap-3 border-b border-rule py-2.5">
+                      <span className="truncate text-sm text-ink">{b.branch}</span>
+                      <span className="shrink-0 text-right text-xs">
+                        <span className="font-mono tabular-nums text-ink">{b.actual.toLocaleString()}</span>
+                        <span className="font-mono text-muted"> / {b.target.toLocaleString()}</span>
+                        <span className={`ml-1.5 font-mono tabular-nums ${statusFor(b.target > 0 ? (b.actual / b.target) * 100 : null).text}`}>
+                          {b.diff > 0 ? '+' : ''}
+                          {b.diff.toLocaleString()}
+                        </span>
+                      </span>
+                    </li>
+                  ))
+                )}
+              </ul>
+            </section>
+
+            <section>
+              <h2 className="font-serif text-xl text-ink">Quality</h2>
+              <ul className="mt-3 border-t border-rule">
+                {qualityData.length === 0 ? (
+                  <li className="py-4 text-sm text-muted">No quality checks logged.</li>
+                ) : (
+                  qualityData.slice(0, 5).map(q => {
+                    const checked = q.pcs_checked || 0;
+                    const faults = q.pcs_faults || 0;
+                    const rate = checked > 0 ? Math.round(((checked - faults) / checked) * 100) : null;
+                    return (
+                      <li
+                        key={q.check_id || q.customer_id}
+                        className="flex items-center justify-between gap-3 border-b border-rule py-2.5"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-sm text-ink">{q.customer_name}</p>
+                          <p className="text-[11px] text-muted">
+                            {(checked - faults).toLocaleString()} of {checked.toLocaleString()} passed
+                          </p>
+                        </div>
+                        <span
+                          className={`shrink-0 font-mono text-sm tabular-nums ${
+                            rate === null ? 'text-muted' : tones[qualityTone(rate)].text
+                          }`}
+                        >
+                          {rate === null ? '—' : `${rate}%`}
+                        </span>
+                      </li>
+                    );
+                  })
+                )}
+              </ul>
+            </section>
+
+            <section>
+              <h2 className="font-serif text-xl text-ink">Stage throughput</h2>
+              <div className="mt-4 space-y-4">
+                {stagesChartData.map(stage => (
+                  <div key={stage.name}>
+                    <div className="flex items-baseline justify-between">
+                      <span className="text-sm text-ink-soft">{stage.name}</span>
+                      <span className="font-mono text-sm tabular-nums text-ink">
+                        {stage.completed.toLocaleString()}
+                      </span>
+                    </div>
+                    <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-raw-cotton">
+                      <div
+                        className="h-full rounded-full bg-ink"
+                        style={{ width: `${(stage.completed / stageMax) * 100}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
               </div>
-            </Card>
-          )}
+            </section>
+          </div>
         </>
       )}
     </div>

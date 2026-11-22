@@ -6,6 +6,7 @@ import { saveWorkforce, getWorkforce } from '../../api/workforce';
 import { Button, Card } from '../../components/ui';
 import { useToast } from '../../components/ui/Toast';
 import { Save, Loader2 } from 'lucide-react';
+import { page } from '../../design';
 
 export default function HourlyEntry() {
   const [lines, setLines] = useState<any[]>([]);
@@ -130,16 +131,16 @@ export default function HourlyEntry() {
   };
 
   return (
-    <div className="p-4 lg:p-6 space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+    <div className={page.shell}>
+      <div className={page.header}>
         <div>
-          <h1 className="text-xl font-semibold text-ink font-sans">Hourly Production Entry</h1>
-          <p className="text-sm text-cool-gray mt-0.5 flex items-center gap-2 font-sans">
-            <span>Enter production quantities per hour per line.</span>
+          <h1 className={page.title}>Hourly Production Entry</h1>
+          <p className={page.subtitle}>
+            Enter production quantities per hour per line.
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <input type="date" className="px-3 py-2 border border-linen rounded-lg text-sm bg-surface-raised font-sans focus:outline-none focus:ring-2 focus:ring-brand/40"
+          <input type="date" className={page.dateInput}
             value={selectedDate}
             onChange={e => setSelectedDate(e.target.value)} />
           <Button onClick={saveAll} disabled={saving || !loaded} loading={saving}>
@@ -151,7 +152,7 @@ export default function HourlyEntry() {
 
       {!loaded ? (
         <div className="flex items-center justify-center py-20">
-          <Loader2 size={32} className="animate-spin text-brand" />
+          <Loader2 size={32} className="animate-spin text-ink" />
         </div>
       ) : (
         <Card padding="none" className="overflow-hidden">

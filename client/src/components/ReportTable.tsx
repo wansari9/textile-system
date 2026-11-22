@@ -1,5 +1,6 @@
 import Card from './ui/Card';
 import { Download } from 'lucide-react';
+import { button, table } from '../design';
 
 interface Column {
   header: string;
@@ -39,7 +40,10 @@ export default function ReportTable({ title, columns, data }: ReportTableProps) 
         <div className="flex items-center justify-between">
           <h3 className="text-[16px] font-semibold text-ink font-sans">{title}</h3>
           {data.length > 0 && (
-            <button onClick={handleExport} className="flex items-center gap-1.5 text-xs font-medium text-brand-dark bg-brand-light hover:bg-brand-light px-2.5 py-1.5 rounded-lg transition-colors font-sans">
+            <button
+              onClick={handleExport}
+              className={`${button.base} ${button.variants.outline} ${button.sizes.sm}`}
+            >
               <Download size={14} />
               Export CSV
             </button>
@@ -47,27 +51,32 @@ export default function ReportTable({ title, columns, data }: ReportTableProps) 
         </div>
       }
     >
-      <div className="overflow-x-auto">
-        <table className="w-full text-[13px]">
+      <div className={table.wrapper}>
+        <table className={table.base}>
           <thead>
-            <tr className="sticky top-0 z-10 border-b border-linen text-left text-[11px] text-cool-gray uppercase tracking-[0.08em] font-sans bg-raw-cotton/50">
+            <tr className={`${table.head} sticky top-0 z-10 bg-raw-cotton/50`}>
               {columns.map((col, idx) => (
-                <th key={idx} scope="col" className="pb-3 pr-4 font-semibold last:pr-0">{col.header}</th>
+                <th key={idx} scope="col" className={`${table.headCell} last:pr-0`}>{col.header}</th>
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-linen">
+          <tbody className={table.body}>
             {data.length === 0 ? (
               <tr>
-                <td colSpan={columns.length} className="py-8 text-center text-sm text-cool-gray font-sans">
+                <td colSpan={columns.length} className="py-8 text-center text-sm text-muted font-sans">
                   No data available.
                 </td>
               </tr>
             ) : (
               data.map((row, rowIdx) => (
-                <tr key={rowIdx} className="border-l-2 border-transparent hover:border-brand transition-colors odd:bg-raw-cotton">
+                <tr key={rowIdx} className={`${table.row} border-l-2 border-transparent hover:border-ink`}>
                   {columns.map((col, colIdx) => (
-                    <td key={colIdx} className={`py-2.5 pr-4 last:pr-0 ${numericColumns[colIdx] ? 'text-right font-mono text-slate' : 'text-slate font-sans'}`}>
+                    <td
+                      key={colIdx}
+                      className={`${table.cell} last:pr-0 ${
+                        numericColumns[colIdx] ? `${table.numeric} text-ink-soft` : 'text-ink-soft font-sans'
+                      }`}
+                    >
                       {format(row[col.accessor])}
                     </td>
                   ))}

@@ -1,5 +1,6 @@
 import type { TextareaHTMLAttributes } from 'react';
 import { forwardRef } from 'react';
+import { field } from '../../design';
 
 interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
   label?: string;
@@ -13,7 +14,7 @@ const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
     return (
       <div className="space-y-[6px]">
         {label && (
-          <label htmlFor={textareaId} className="block text-[12px] font-semibold text-cool-gray uppercase tracking-wider font-sans">
+          <label htmlFor={textareaId} className={field.label}>
             {label}
           </label>
         )}
@@ -22,14 +23,10 @@ const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
           id={textareaId}
           aria-invalid={error ? 'true' : undefined}
           aria-describedby={errorId}
-          className={`w-full px-3 py-2 rounded-lg border text-sm font-sans transition-all duration-150 placeholder:text-cool-gray focus:outline-none focus:ring-2 disabled:bg-raw-cotton disabled:text-cool-gray ${
-            error
-              ? 'border-defect-red focus:ring-defect-red/40'
-              : 'border-linen focus:ring-brand/40 focus:border-brand'
-          } ${className}`}
+          className={`${field.control(Boolean(error))} h-auto py-2 ${className}`}
           {...props}
         />
-        {error && <p id={errorId} className="text-xs text-defect-red font-sans">{error}</p>}
+        {error && <p id={errorId} className={field.error}>{error}</p>}
       </div>
     );
   }

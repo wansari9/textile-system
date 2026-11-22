@@ -4,6 +4,7 @@ import { getProducts } from '../../api/products';
 import { getBranches } from '../../api/branches';
 import { Button, Card, Input, Select, Badge, Modal } from '../../components/ui';
 import { useToast } from '../../components/ui/Toast';
+import { page, table } from '../../design';
 
 export default function Lines() {
   const [lines, setLines] = useState<any[]>([]);
@@ -80,11 +81,11 @@ export default function Lines() {
   };
 
   return (
-    <div className="p-4 lg:p-6 space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+    <div className={page.shell}>
+      <div className={page.header}>
         <div>
-          <h1 className="text-2xl lg:text-3xl font-bold text-ink">Production Lines</h1>
-          <p className="text-sm text-cool-gray mt-1">Manage production lines and product assignments</p>
+          <h1 className={page.title}>Production Lines</h1>
+          <p className={page.subtitle}>Manage production lines and product assignments</p>
         </div>
         <Button onClick={openCreate}>Add Line</Button>
       </div>
@@ -93,7 +94,7 @@ export default function Lines() {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-linen text-left text-xs text-cool-gray uppercase tracking-wider bg-greige/50">
+              <tr className={table.headRow}>
                 <th className="px-5 py-3 font-medium">Line Name</th>
                 <th className="px-5 py-3 font-medium">Branch</th>
                 <th className="px-5 py-3 font-medium">Status</th>
@@ -102,15 +103,15 @@ export default function Lines() {
                 <th className="px-5 py-3 font-medium text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-border">
+            <tbody className={table.body}>
               {lines.map(line => (
-                <tr key={line.line_id} className="hover:bg-greige transition-colors">
+                <tr key={line.line_id} className={table.row}>
                   <td className="px-5 py-3 font-medium text-ink">{line.line_name}</td>
-                  <td className="px-5 py-3 text-slate">{line.branch_name}</td>
+                  <td className="px-5 py-3 text-ink-soft">{line.branch_name}</td>
                   <td className="px-5 py-3">
                     <Badge status={line.status === 'ACTIVE' ? 'on_target' : line.status === 'MAINTENANCE' ? 'warning' : 'default'} size="sm">{line.status}</Badge>
                   </td>
-                  <td className="px-5 py-3 text-slate">{line.currentProduct}</td>
+                  <td className="px-5 py-3 text-ink-soft">{line.currentProduct}</td>
                   <td className="px-5 py-3 text-right font-medium">{line.target}</td>
                   <td className="px-5 py-3 text-right space-x-2">
                     <Button variant="ghost" size="sm" onClick={() => openEdit(line)}>Edit</Button>
@@ -120,7 +121,7 @@ export default function Lines() {
               ))}
               {lines.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-5 py-12 text-center text-sm text-cool-gray">No lines configured.</td>
+                  <td colSpan={6} className={table.empty}>No lines configured.</td>
                 </tr>
               )}
             </tbody>

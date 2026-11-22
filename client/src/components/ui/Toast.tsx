@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, createContext, useContext, type ReactNode } from 'react';
 import { CheckCircle2, XCircle, AlertCircle, Info, X } from 'lucide-react';
+import { toast as toastStyles } from '../../design';
 
 type ToastType = 'success' | 'error' | 'warning' | 'info';
 
@@ -20,17 +21,10 @@ export const useToast = () => useContext(ToastContext);
 let nextId = 0;
 
 const icons: Record<ToastType, ReactNode> = {
-  success: <CheckCircle2 size={18} className="text-loom-green" />,
-  error: <XCircle size={18} className="text-defect-red" />,
-  warning: <AlertCircle size={18} className="text-caution-amber" />,
-  info: <Info size={18} className="text-brand" />,
-};
-
-const bgColors: Record<ToastType, string> = {
-  success: 'bg-loom-green-bg border-loom-green/20',
-  error: 'bg-defect-red-bg border-defect-red/20',
-  warning: 'bg-amber-bg border-caution-amber/20',
-  info: 'bg-brand-light border-brand/20',
+  success: <CheckCircle2 size={18} className={toastStyles.iconColor.success} />,
+  error: <XCircle size={18} className={toastStyles.iconColor.error} />,
+  warning: <AlertCircle size={18} className={toastStyles.iconColor.warning} />,
+  info: <Info size={18} className={toastStyles.iconColor.info} />,
 };
 
 function ToastItem({ t, onRemove }: { t: Toast; onRemove: (id: number) => void }) {
@@ -40,10 +34,10 @@ function ToastItem({ t, onRemove }: { t: Toast; onRemove: (id: number) => void }
   }, [t.id, onRemove]);
 
   return (
-    <div className={`flex items-center gap-2.5 px-4 py-3 rounded-lg border shadow-card animate-[slideUp_200ms_ease-out] ${bgColors[t.type]}`}>
+    <div className={`${toastStyles.base} ${toastStyles.styles[t.type]}`}>
       {icons[t.type]}
       <p className="text-sm font-medium text-ink flex-1 font-sans">{t.message}</p>
-      <button onClick={() => onRemove(t.id)} className="p-0.5 text-cool-gray hover:text-ink">
+      <button onClick={() => onRemove(t.id)} className="p-0.5 text-muted hover:text-ink">
         <X size={14} />
       </button>
     </div>

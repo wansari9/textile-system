@@ -3,6 +3,7 @@ import ReportTable from '../../components/ReportTable';
 import { getBranches, getBranchSummary, upsertBranchDaily } from '../../api/branches';
 import { Button, Card } from '../../components/ui';
 import { useToast } from '../../components/ui/Toast';
+import { field, page } from '../../design';
 
 export default function Branches() {
   const [branches, setBranches] = useState<any[]>([]);
@@ -61,14 +62,14 @@ export default function Branches() {
   };
 
   return (
-    <div className="p-4 lg:p-6 space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+    <div className={page.shell}>
+      <div className={page.header}>
         <div>
-          <h1 className="text-2xl lg:text-3xl font-bold text-ink">Satellite Branches</h1>
-          <p className="text-sm text-cool-gray mt-1">Track daily production targets for each branch</p>
+          <h1 className={page.title}>Satellite Branches</h1>
+          <p className={page.subtitle}>Track daily production targets for each branch</p>
         </div>
         <div className="flex items-center gap-2">
-          <input type="date" className="px-3 py-2 border border-linen rounded-lg text-sm bg-surface-raised focus:outline-none focus:ring-2 focus:ring-brand/40"
+          <input type="date" className={page.dateInput}
             value={selectedDate}
             onChange={e => setSelectedDate(e.target.value)} />
         </div>
@@ -80,21 +81,21 @@ export default function Branches() {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-xs text-cool-gray uppercase border-b border-linen">
+              <tr className="text-[10px] text-muted uppercase tracking-[0.14em] border-b border-rule">
                 <th className="text-left pb-3 pr-4 font-medium">Branch</th>
                 <th className="text-center pb-3 pr-4 font-medium">Daily Target</th>
                 <th className="text-center pb-3 pr-4 font-medium">Quantity Produced</th>
                 <th className="text-center pb-3 font-medium"></th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-border">
+            <tbody className="divide-y divide-rule">
               {branches.map((branch: any) => (
                 <tr key={branch.branch_id}>
                   <td className="py-3 pr-4 font-medium text-ink">{branch.branch_name}</td>
                   <td className="py-3 pr-4 text-center">
                     <input
                       type="number"
-                      className="w-24 px-2 py-1.5 border border-linen rounded text-center text-sm focus:outline-none focus:ring-2 focus:ring-brand/40"
+                      className={`w-24 ${field.compact}`}
                       placeholder="0"
                       value={input[branch.branch_id]?.daily_target ?? ''}
                       onChange={e => setInput(prev => ({ ...prev, [branch.branch_id]: { ...prev[branch.branch_id], daily_target: Number(e.target.value), qty_produced: prev[branch.branch_id]?.qty_produced || 0 } }))}
@@ -103,7 +104,7 @@ export default function Branches() {
                   <td className="py-3 pr-4 text-center">
                     <input
                       type="number"
-                      className="w-24 px-2 py-1.5 border border-linen rounded text-center text-sm focus:outline-none focus:ring-2 focus:ring-brand/40"
+                      className={`w-24 ${field.compact}`}
                       placeholder="0"
                       value={input[branch.branch_id]?.qty_produced ?? ''}
                       onChange={e => setInput(prev => ({ ...prev, [branch.branch_id]: { ...prev[branch.branch_id], qty_produced: Number(e.target.value), daily_target: prev[branch.branch_id]?.daily_target || 0 } }))}
@@ -118,7 +119,7 @@ export default function Branches() {
               ))}
               {branches.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="py-8 text-center text-sm text-cool-gray">No branches configured.</td>
+                  <td colSpan={4} className="py-8 text-center text-sm text-muted">No branches configured.</td>
                 </tr>
               )}
             </tbody>

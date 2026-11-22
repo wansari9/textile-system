@@ -3,6 +3,7 @@ import { getCustomers } from '../../api/customers';
 import { postQuality } from '../../api/quality';
 import { Button, Card, Input, Select } from '../../components/ui';
 import { CheckCircle2, XCircle } from 'lucide-react';
+import { page, qualityTone, tones } from '../../design';
 
 export default function Quality() {
   const [customers, setCustomers] = useState<any[]>([]);
@@ -21,7 +22,7 @@ export default function Quality() {
 
   const passRate = checked > 0 ? (((checked - faults) / checked) * 100).toFixed(1) : '0';
   const passRateNum = Number(passRate);
-  const passRateStatus = passRateNum >= 95 ? 'good' : passRateNum >= 85 ? 'amber' : 'bad';
+  const passTone = tones[qualityTone(passRateNum)];
 
   const handleSubmit = async () => {
     if (!customerId) return;
@@ -47,22 +48,27 @@ export default function Quality() {
   };
 
   return (
-    <div className="p-4 lg:p-6 space-y-6 max-w-3xl">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+    <div className={`${page.shell} max-w-3xl`}>
+      <div className={page.header}>
         <div>
-          <h1 className="text-2xl lg:text-3xl font-bold text-ink">Quality Control</h1>
-          <p className="text-sm text-cool-gray mt-1">Enter total pieces checked and faults found for the day</p>
+          <h1 className={page.title}>Quality Control</h1>
+          <p className={page.subtitle}>Enter total pieces checked and faults found for the day</p>
         </div>
         <div className="flex items-center gap-2">
-          <input type="date" className="px-3 py-2 border border-linen rounded-lg text-sm bg-surface-raised focus:outline-none focus:ring-2 focus:ring-brand/40"
+          <input
+            type="date"
+            className={page.dateInput}
             value={selectedDate}
-            onChange={e => setSelectedDate(e.target.value)} />
+            onChange={e => setSelectedDate(e.target.value)}
+          />
         </div>
       </div>
 
       {message && (
-        <div className={`p-3 rounded-lg text-sm font-medium flex items-center gap-2 ${
-          message.includes('success') ? 'bg-loom-green-bg text-loom-green border border-loom-green/20' : 'bg-defect-red-bg text-defect-red border border-defect-red/20'
+        <div className={`p-3 rounded-lg text-sm font-medium flex items-center gap-2 border ${
+          message.includes('success')
+            ? `${tones.onTarget.soft} ${tones.onTarget.text} ${tones.onTarget.border}`
+            : `${tones.behind.soft} ${tones.behind.text} ${tones.behind.border}`
         }`}>
           {message.includes('success') ? <CheckCircle2 size={16} /> : <XCircle size={16} />}
           {message}
@@ -77,22 +83,19 @@ export default function Quality() {
 
           <div className="grid grid-cols-2 gap-4">
             <Input label="Pieces Checked" type="number" value={checked} onChange={e => setChecked(Number(e.target.value))} />
-            <Input label="Total Faults" type="number" value={faults} onChange={e => setFaults(Number(e.target.value))}
-              className="border-defect-red focus:ring-defect-red/40" />
+            <Input label="Total Faults" type="number" value={faults} onChange={e => setFaults(Number(e.target.value))} />
           </div>
 
-          <div className="p-5 bg-raw-cotton rounded-xl border border-linen text-center">
-            <p className="text-sm text-cool-gray font-medium mb-1 font-sans">Pass Rate</p>
-            <p className={`text-4xl font-bold font-mono ${
-              passRateStatus === 'good' ? 'text-loom-green' : passRateStatus === 'amber' ? 'text-caution-amber' : 'text-defect-red'
-            }`}>
+          <div className="p-5 bg-raw-cotton rounded-xl border border-rule text-center">
+            <p className="text-sm text-muted font-medium mb-1 font-sans">Pass Rate</p>
+            <p className={`text-4xl font-bold font-mono ${passTone.text}`}>
               {passRate}%
             </p>
             <div className="mt-3 w-full bg-linen rounded-full h-2.5 max-w-xs mx-auto">
-              <div className={`h-2.5 rounded-full transition-all duration-300 ${
-                passRateStatus === 'good' ? 'bg-loom-green' : passRateStatus === 'amber' ? 'bg-caution-amber' : 'bg-defect-red'
-              }`}
-                style={{ width: `${Math.min(passRateNum, 100)}%` }} />
+              <div
+                className={`h-2.5 rounded-full transition-all duration-300 ${passTone.fill}`}
+                style={{ width: `${Math.min(passRateNum, 100)}%` }}
+              />
             </div>
           </div>
 

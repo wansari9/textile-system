@@ -1,4 +1,4 @@
-import { Link, Outlet, useLocation } from 'react-router-dom';
+import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
   ClipboardList,
@@ -14,8 +14,12 @@ import {
   ChevronRight,
   Bell,
   Menu,
+  Bookmark,
+  LogOut,
 } from 'lucide-react';
 import { useState, useMemo } from 'react';
+import { addDays, toISODate } from '../lib/date';
+import { layout } from '../design';
 
 interface NavItem {
   name: string;
@@ -39,7 +43,7 @@ const allNavItems: NavItem[] = [
 ];
 
 const pageTitles: Record<string, string> = {
-  '/': 'Dashboard',
+  '/': 'Floor overview',
   '/entry': 'Hourly Production Entry',
   '/lines': 'Production Lines',
   '/products': 'Products',
@@ -53,58 +57,79 @@ const pageTitles: Record<string, string> = {
 
 export default function MainLayout() {
   const location = useLocation();
-  const [user] = useState<any>({ name: 'Dev User', role: 'ADMIN' });
+  const navigate = useNavigate();
+
+  // Read the user saved at login instead of hardcoding an admin.
+  const [user] = useState<any>(() => {
+    try {
+      const stored = localStorage.getItem('user');
+      return stored ? JSON.parse(stored) : { name: 'Dev User', role: 'ADMIN' };
+    } catch {
+      return { name: 'Dev User', role: 'ADMIN' };
+    }
+  });
+
   const isSupervisor = user?.role === 'SUPERVISOR';
   const [collapsed, setCollapsed] = useState(isSupervisor);
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const navItems = useMemo(() => allNavItems.filter(item => item.roles.includes(user?.role || 'ADMIN')), [user]);
-
   const pageTitle = pageTitles[location.pathname] || 'AmirtexOS';
+  const initial = user?.name?.charAt(0)?.toUpperCase() || 'U';
+
+  const today = new Date();
+  const savedViews = [
+    { label: 'Today', date: toISODate(today) },
+    { label: 'Yesterday', date: toISODate(addDays(today, -1)) },
+    { label: 'A week ago', date: toISODate(addDays(today, -7)) },
+  ];
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    navigate('/login');
+  };
 
   return (
-    <div className="flex h-screen bg-greige">
+    <div className={layout.shell}>
       {/* Mobile overlay */}
       {mobileOpen && (
-        <div className="fixed inset-0 bg-black/40 z-40 lg:hidden" onClick={() => setMobileOpen(false)} />
+        <div className="fixed inset-0 bg-ink/30 z-40 lg:hidden" onClick={() => setMobileOpen(false)} />
       )}
 
       {/* Sidebar */}
       <aside
-        className={`
-          fixed lg:static inset-y-0 left-0 z-50 flex flex-col bg-factory-night text-white transition-all duration-300
-          ${collapsed ? 'w-14' : 'w-60'}
-          ${mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
-        `}
+        className={`${layout.sidebar} ${collapsed ? 'w-14' : 'w-60'} ${
+          mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+        }`}
       >
         {/* Brand */}
-        <div className={`flex items-center h-14 border-b border-white/[0.08] ${collapsed ? 'justify-center px-0' : 'gap-2.5 px-4'}`}>
-          <Factory className="text-brand shrink-0" size={22} />
-          {!collapsed && <h1 className="text-base font-semibold tracking-wide">Amirtex<span className="text-brand">OS</span></h1>}
+        <div className={`${layout.brandRow} ${collapsed ? 'justify-center px-0' : 'gap-2.5 px-4'}`}>
+          <div className={layout.brandMark}>
+            <Factory size={17} />
+          </div>
+          {!collapsed && (
+            <h1 className={layout.brandText}>
+              Amirtex<span className="text-muted">OS</span>
+            </h1>
+          )}
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 py-2 overflow-y-auto">
+        <nav className="flex-1 py-3 overflow-y-auto">
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = location.pathname === item.path;
             return (
               <div key={item.name}>
-                {item.separator && <div className="mx-4 my-2 h-px bg-white/[0.06]" />}
+                {item.separator && <div className="mx-4 my-2 h-px bg-rule" />}
                 <Link
                   to={item.path}
                   onClick={() => setMobileOpen(false)}
-                  className={`relative flex items-center gap-3 mx-2 px-3 py-2.5 rounded-md transition-all duration-150 group ${
-                    isActive
-                      ? 'text-white'
-                      : 'text-muted-steel hover:text-white hover:bg-white/[0.06]'
-                  }`}
+                  className={`${layout.navLink} ${isActive ? layout.navActive : layout.navIdle}`}
                   title={collapsed ? item.name : undefined}
                 >
-                  {isActive && (
-                    <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-brand rounded-r-sm" />
-                  )}
-                  <Icon size={18} className="shrink-0" />
+                  <Icon size={17} className="shrink-0" />
                   {!collapsed && <span className="text-sm font-medium whitespace-nowrap">{item.name}</span>}
                 </Link>
               </div>
@@ -112,29 +137,66 @@ export default function MainLayout() {
           })}
         </nav>
 
+        {/* Saved views */}
+        {!collapsed && (
+          <div className="mx-2 mb-3 rounded-xl border border-rule bg-canvas/70 p-3">
+            <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-[0.16em] text-muted">
+              <Bookmark size={12} /> Saved views
+            </div>
+            <div className="mt-2 space-y-0.5">
+              {savedViews.map((view) => {
+                const active = location.pathname === '/' && location.search === `?date=${view.date}`;
+                return (
+                  <Link
+                    key={view.label}
+                    to={`/?date=${view.date}`}
+                    className={`block rounded-md px-2 py-1.5 text-xs transition-colors ${
+                      active ? layout.savedViewActive : layout.savedViewIdle
+                    }`}
+                  >
+                    {view.label}
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Collapse toggle (desktop) */}
         <button
           onClick={() => setCollapsed(!collapsed)}
-          className="hidden lg:flex items-center justify-center h-9 mx-2 mb-2 rounded-md text-muted-steel hover:text-white hover:bg-white/[0.06] transition-colors"
+          className="hidden lg:flex items-center justify-center h-9 mx-2 mb-2 rounded-md text-muted hover:text-ink hover:bg-raw-cotton transition-colors"
+          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         >
           {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
         </button>
 
-        {/* User info */}
+        {/* User card — the one dark surface in the sidebar */}
         {user && (
-          <div className={`border-t border-white/[0.08] ${collapsed ? 'py-3 text-center' : 'px-4 py-3'}`}>
+          <div className={`border-t border-rule ${collapsed ? 'py-3' : 'p-3'}`}>
             {collapsed ? (
-              <div className="w-8 h-8 rounded-full bg-brand/80 flex items-center justify-center text-sm font-bold mx-auto">
-                {user.name?.charAt(0)?.toUpperCase() || 'U'}
+              <div className="w-9 h-9 rounded-full bg-ink text-lime flex items-center justify-center text-sm font-semibold mx-auto">
+                {initial}
               </div>
             ) : (
-              <div className="flex items-center justify-between">
-                <div className="text-sm min-w-0">
-                  <p className="text-white font-medium truncate">{user.name}</p>
-                  <p className="text-muted-steel text-xs">{user.role === 'ADMIN' ? 'Administrator' : 'Supervisor'}</p>
-                </div>
-                <div className="w-8 h-8 rounded-full bg-brand/80 flex items-center justify-center text-sm font-bold shrink-0">
-                  {user.name?.charAt(0)?.toUpperCase() || 'U'}
+              <div className={layout.userCard}>
+                <div className="flex items-center gap-2.5">
+                  <div className={layout.avatar}>
+                    {initial}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium truncate">{user.name}</p>
+                    <p className="text-[11px] text-white/50">
+                      {user.role === 'ADMIN' ? 'Administrator' : 'Supervisor'}
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleLogout}
+                    title="Sign out"
+                    className="p-1.5 rounded-md text-white/40 hover:text-white hover:bg-white/10 transition-colors"
+                  >
+                    <LogOut size={14} />
+                  </button>
                 </div>
               </div>
             )}
@@ -145,31 +207,33 @@ export default function MainLayout() {
       {/* Main area */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top header */}
-        <header className="h-14 bg-surface-raised border-b border-linen flex items-center justify-between px-4 lg:px-6 sticky top-0 z-30">
+        <header className={layout.header}>
           <div className="flex items-center gap-3">
             <button
               onClick={() => setMobileOpen(true)}
-              className="lg:hidden p-2 text-slate hover:bg-raw-cotton rounded-lg"
+              className={`lg:hidden ${layout.iconButton}`}
+              aria-label="Open navigation"
             >
               <Menu size={18} />
             </button>
-            <div>
-              <h2 className="text-base font-semibold text-ink">{pageTitle}</h2>
-            </div>
+            <h2 className={layout.pageTitle}>{pageTitle}</h2>
           </div>
           <div className="flex items-center gap-2">
-            <button className="p-2 text-cool-gray hover:text-slate hover:bg-raw-cotton rounded-lg relative" aria-label="Notifications">
+            <button
+              className={`${layout.iconButton} relative`}
+              aria-label="Notifications"
+            >
               <Bell size={18} />
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-defect-red rounded-full" />
+              <span className="absolute top-2 right-2 w-1.5 h-1.5 bg-lime-deep rounded-full" />
             </button>
             {user && (
-              <div className="hidden sm:flex items-center gap-2 pl-2 border-l border-linen">
-                <div className="w-7 h-7 rounded-full bg-brand-light text-brand flex items-center justify-center text-xs font-bold">
-                  {user.name?.charAt(0)?.toUpperCase() || 'U'}
+              <div className="hidden sm:flex items-center gap-2 pl-2 border-l border-rule">
+                <div className="w-7 h-7 rounded-full bg-lime-soft text-ink flex items-center justify-center text-xs font-semibold">
+                  {initial}
                 </div>
                 <div className="text-sm leading-tight">
                   <p className="font-medium text-ink">{user.name}</p>
-                  <p className="text-xs text-cool-gray">{user.role === 'ADMIN' ? 'Administrator' : 'Supervisor'}</p>
+                  <p className="text-[11px] text-muted">{user.role === 'ADMIN' ? 'Administrator' : 'Supervisor'}</p>
                 </div>
               </div>
             )}

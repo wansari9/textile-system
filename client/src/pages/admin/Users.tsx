@@ -3,6 +3,7 @@ import { getUsers, createUser, updateUser, resetPassword, deleteUser } from '../
 import { getLines } from '../../api/lines';
 import { Button, Card, Input, Select, Badge, Modal } from '../../components/ui';
 import { useToast } from '../../components/ui/Toast';
+import { page, table } from '../../design';
 
 export default function Users() {
   const [users, setUsers] = useState<any[]>([]);
@@ -71,11 +72,11 @@ export default function Users() {
   };
 
   return (
-    <div className="p-4 lg:p-6 space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+    <div className={page.shell}>
+      <div className={page.header}>
         <div>
-          <h1 className="text-2xl lg:text-3xl font-bold text-ink">User Management</h1>
-          <p className="text-sm text-cool-gray mt-1">Manage system users and their role assignments</p>
+          <h1 className={page.title}>User Management</h1>
+          <p className={page.subtitle}>Manage system users and their role assignments</p>
         </div>
         <Button onClick={openCreate}>Add User</Button>
       </div>
@@ -84,7 +85,7 @@ export default function Users() {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-linen text-left text-xs text-cool-gray uppercase tracking-wider bg-greige/50">
+              <tr className={table.headRow}>
                 <th className="px-5 py-3 font-medium">Username</th>
                 <th className="px-5 py-3 font-medium">Full Name</th>
                 <th className="px-5 py-3 font-medium">Role</th>
@@ -92,26 +93,26 @@ export default function Users() {
                 <th className="px-5 py-3 font-medium text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-border">
+            <tbody className={table.body}>
               {users.map(user => (
-                <tr key={user.user_id} className="hover:bg-greige transition-colors">
+                <tr key={user.user_id} className={table.row}>
                   <td className="px-5 py-3 font-medium text-ink">{user.username}</td>
-                  <td className="px-5 py-3 text-slate">{user.full_name}</td>
+                  <td className="px-5 py-3 text-ink-soft">{user.full_name}</td>
                   <td className="px-5 py-3">
                     <Badge status={user.role === 'ADMIN' ? 'default' : 'on_target'} size="sm">{user.role}</Badge>
                   </td>
-                  <td className="px-5 py-3 text-slate">
+                  <td className="px-5 py-3 text-ink-soft">
                     {lines.find(l => l.line_id === user.assigned_line_id)?.line_name || '-'}
                   </td>
                   <td className="px-5 py-3 text-right space-x-1">
                     <Button variant="ghost" size="sm" onClick={() => openEdit(user)}>Edit</Button>
-                    <Button variant="ghost" size="sm" className="text-defect-red hover:text-defect-red" onClick={() => handleDelete(user.user_id)}>Deactivate</Button>
+                    <Button variant="ghost" size="sm" className="text-risk hover:text-risk" onClick={() => handleDelete(user.user_id)}>Deactivate</Button>
                   </td>
                 </tr>
               ))}
               {users.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-5 py-12 text-center text-sm text-cool-gray">No users found.</td>
+                  <td colSpan={5} className={table.empty}>No users found.</td>
                 </tr>
               )}
             </tbody>

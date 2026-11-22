@@ -1,3 +1,5 @@
+import { statusFor } from '../../design';
+
 interface ProductionBarProps {
   produced: number;
   target: number;
@@ -7,11 +9,15 @@ interface ProductionBarProps {
   className?: string;
 }
 
+/** Status colours come from the design system, never from this component. */
 export function getStatusColor(pct: number, lineStatus?: string) {
-  if (lineStatus === 'MAINTENANCE') return { text: 'text-cool-gray', bg: 'bg-raw-cotton', border: 'border-cool-gray', fill: 'bg-cool-gray' };
-  if (pct >= 100) return { text: 'text-loom-green', bg: 'bg-loom-green-bg', border: 'border-loom-green', fill: 'bg-loom-green' };
-  if (pct >= 70) return { text: 'text-caution-amber', bg: 'bg-amber-bg', border: 'border-caution-amber', fill: 'bg-caution-amber' };
-  return { text: 'text-defect-red', bg: 'bg-defect-red-bg', border: 'border-defect-red', fill: 'bg-defect-red' };
+  const tone = statusFor(pct, lineStatus);
+  return {
+    text: tone.text,
+    bg: tone.soft,
+    border: tone.border,
+    fill: tone.fill,
+  };
 }
 
 export default function ProductionBar({
@@ -34,7 +40,7 @@ export default function ProductionBar({
           style={{ width: `${pct}%` }}
         />
         {overflow && (
-          <span className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-full pl-1 text-xs text-loom-green font-mono">
+          <span className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-full pl-1 text-xs text-lime-deep font-mono">
             ❯
           </span>
         )}

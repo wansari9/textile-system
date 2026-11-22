@@ -4,6 +4,7 @@ import { getProductsByCustomer } from '../../api/products';
 import { Button, Card, Input, Textarea, Badge, Modal } from '../../components/ui';
 import { useToast } from '../../components/ui/Toast';
 import { ChevronRight, ChevronDown } from 'lucide-react';
+import { page, table } from '../../design';
 
 export default function Customers() {
   const [customers, setCustomers] = useState<any[]>([]);
@@ -76,11 +77,11 @@ export default function Customers() {
   };
 
   return (
-    <div className="p-4 lg:p-6 space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+    <div className={page.shell}>
+      <div className={page.header}>
         <div>
-          <h1 className="text-2xl lg:text-3xl font-bold text-ink">Customers & Products</h1>
-          <p className="text-sm text-cool-gray mt-1">Manage customer accounts and their product catalog</p>
+          <h1 className={page.title}>Customers &amp; Products</h1>
+          <p className={page.subtitle}>Manage customer accounts and their product catalog</p>
         </div>
         <Button onClick={openCreate}>Add Customer</Button>
       </div>
@@ -89,7 +90,7 @@ export default function Customers() {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-linen text-left text-xs text-cool-gray uppercase tracking-wider bg-greige/50">
+              <tr className={table.headRow}>
                 <th className="px-5 py-3 font-medium w-8"></th>
                 <th className="px-5 py-3 font-medium">Customer Name</th>
                 <th className="px-5 py-3 font-medium">Contact Person</th>
@@ -97,34 +98,34 @@ export default function Customers() {
                 <th className="px-5 py-3 font-medium text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-border">
+            <tbody className={table.body}>
               {customers.map(customer => (
                 <Fragment key={customer.customer_id}>
-                  <tr className="hover:bg-greige transition-colors cursor-pointer" onClick={() => toggleExpand(customer.customer_id)}>
-                    <td className="px-5 py-3 text-center text-cool-gray">
+                  <tr className={`${table.row} cursor-pointer`} onClick={() => toggleExpand(customer.customer_id)}>
+                    <td className="px-5 py-3 text-center text-muted">
                       {expandedId === customer.customer_id ? <ChevronDown size={16} className="inline" /> : <ChevronRight size={16} className="inline" />}
                     </td>
                     <td className="px-5 py-3 font-medium text-ink">{customer.customer_name}</td>
-                    <td className="px-5 py-3 text-slate">{customer.contact_person}</td>
-                    <td className="px-5 py-3 text-slate">{customer.phone}</td>
+                    <td className="px-5 py-3 text-ink-soft">{customer.contact_person}</td>
+                    <td className="px-5 py-3 text-ink-soft">{customer.phone}</td>
                     <td className="px-5 py-3 text-right space-x-1" onClick={e => e.stopPropagation()}>
                       <Button variant="ghost" size="sm" onClick={() => openEdit(customer)}>Edit</Button>
-                      <Button variant="ghost" size="sm" className="text-defect-red hover:text-defect-red" onClick={() => handleDelete(customer.customer_id)}>Deactivate</Button>
+                      <Button variant="ghost" size="sm" className="text-risk hover:text-risk" onClick={() => handleDelete(customer.customer_id)}>Deactivate</Button>
                     </td>
                   </tr>
                   {expandedId === customer.customer_id && (
                     <tr key={`${customer.customer_id}-products`}>
-                      <td colSpan={5} className="px-5 py-4 bg-greige/50">
-                        <div className="bg-surface-raised rounded-lg border border-linen p-4">
+                      <td colSpan={5} className="px-5 py-4 bg-canvas/50">
+                        <div className="bg-surface-raised rounded-lg border border-rule p-4">
                           <h4 className="font-semibold text-ink text-sm mb-3">Products</h4>
                           {!productsMap[customer.customer_id] ? (
-                            <p className="text-sm text-cool-gray">Loading...</p>
+                            <p className="text-sm text-muted">Loading...</p>
                           ) : productsMap[customer.customer_id].length === 0 ? (
-                            <p className="text-sm text-cool-gray">No products for this customer.</p>
+                            <p className="text-sm text-muted">No products for this customer.</p>
                           ) : (
                             <table className="w-full text-sm">
                               <thead>
-                                <tr className="text-xs text-cool-gray uppercase border-b border-linen">
+                                <tr className="text-[10px] text-muted uppercase tracking-[0.14em] border-b border-rule">
                                   <th className="text-left pb-2 pr-4 font-medium">Product Name</th>
                                   <th className="text-left pb-2 pr-4 font-medium">Style Code</th>
                                   <th className="text-right pb-2 pr-4 font-medium">Order Quantity</th>
@@ -132,7 +133,7 @@ export default function Customers() {
                                   <th className="text-center pb-2 font-medium">Status</th>
                                 </tr>
                               </thead>
-                              <tbody className="divide-y divide-border text-slate">
+                              <tbody className="divide-y divide-rule text-ink-soft">
                                 {productsMap[customer.customer_id].map((prod: any) => (
                                   <tr key={prod.product_id}>
                                     <td className="py-2 pr-4 text-ink font-medium">{prod.product_name}</td>
@@ -157,7 +158,7 @@ export default function Customers() {
               ))}
               {customers.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-5 py-12 text-center text-sm text-cool-gray">No customers found.</td>
+                  <td colSpan={5} className={table.empty}>No customers found.</td>
                 </tr>
               )}
             </tbody>
