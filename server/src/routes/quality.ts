@@ -1,11 +1,16 @@
 import { Router, Request, Response } from 'express';
 import pool from '../config/db';
+import { authenticateToken, requireRole } from '../middleware/auth';
 
 const router = Router();
 
+// Quality control is an admin-only area.
+router.use(authenticateToken, requireRole('ADMIN'));
+
 // POST /api/quality  (upsert today's QC tally for a customer)
 router.post('/', async (req: Request, res: Response) => {
-  const { customer_id, production_date, pcs_checked, pcs_faults, entered_by } = req.body;
+  const { customer_id, production_date, pcs_checked, pcs_faults } = req.body;
+  const enteredBy = (req as any).user.id;
 
   if (!customer_id || !production_date || pcs_checked === undefined) {
     return res.status(400).json({
@@ -25,8 +30,7 @@ router.post('/', async (req: Request, res: Response) => {
          entered_by  = EXCLUDED.entered_by,
          entered_at   = CURRENT_TIMESTAMP
        RETURNING check_id, customer_id, production_date, pcs_checked, pcs_faults, entered_by, entered_at`,
-      [customer_id, production_date, pcs_checked, pcs_faults ?? 0, entered_by ?? null]
-      // TODO: once auth middleware exists, take entered_by from req.user.userId instead of the body
+      [customer_id, production_date, pcs_checked, pcs_faults ?? 0, enteredBy]
     );
     res.status(201).json({ success: true, data: result.rows[0] });
   } catch (error: any) {

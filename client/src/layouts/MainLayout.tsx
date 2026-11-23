@@ -30,11 +30,11 @@ interface NavItem {
 }
 
 const allNavItems: NavItem[] = [
-  { name: 'Dashboard', path: '/', icon: LayoutDashboard, roles: ['ADMIN', 'SUPERVISOR'] },
+  { name: 'Dashboard', path: '/', icon: LayoutDashboard, roles: ['ADMIN', 'LINE_MANAGER', 'SUPERVISOR'] },
   { name: 'Production Lines', path: '/lines', icon: Factory, roles: ['ADMIN'] },
-  { name: 'Hourly Entry', path: '/entry', icon: ClipboardList, roles: ['ADMIN', 'SUPERVISOR'] },
-  { name: 'Cutting / Packing', path: '/stages', icon: PackageSearch, roles: ['ADMIN', 'SUPERVISOR'] },
-  { name: 'Quality Control', path: '/quality', icon: ShieldCheck, roles: ['ADMIN', 'SUPERVISOR'] },
+  { name: 'Hourly Entry', path: '/entry', icon: ClipboardList, roles: ['ADMIN', 'LINE_MANAGER', 'SUPERVISOR'] },
+  { name: 'Cutting / Packing', path: '/stages', icon: PackageSearch, roles: ['ADMIN', 'LINE_MANAGER', 'SUPERVISOR'] },
+  { name: 'Quality Control', path: '/quality', icon: ShieldCheck, roles: ['ADMIN', 'LINE_MANAGER', 'SUPERVISOR'] },
   { name: 'Branches', path: '/branches', icon: GitBranch, roles: ['ADMIN'] },
   { name: 'Products', path: '/products', icon: Package, roles: ['ADMIN'] },
   { name: 'Customers', path: '/customers', icon: Building2, roles: ['ADMIN'] },
@@ -69,7 +69,7 @@ export default function MainLayout() {
     }
   });
 
-  const isSupervisor = user?.role === 'SUPERVISOR';
+  const isSupervisor = user?.role === 'SUPERVISOR' || user?.role === 'LINE_MANAGER';
   const [collapsed, setCollapsed] = useState(isSupervisor);
   const [mobileOpen, setMobileOpen] = useState(false);
 

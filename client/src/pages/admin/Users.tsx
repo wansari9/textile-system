@@ -10,7 +10,7 @@ export default function Users() {
   const [lines, setLines] = useState<any[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<any | null>(null);
-  const [form, setForm] = useState({ username: '', password: '', full_name: '', email: '', role: 'SUPERVISOR', assigned_line_id: '' });
+  const [form, setForm] = useState({ username: '', password: '', full_name: '', email: '', role: 'LINE_MANAGER', assigned_line_id: '' });
   const { toast } = useToast();
 
   const fetchUsers = async () => {
@@ -25,7 +25,7 @@ export default function Users() {
 
   const openCreate = () => {
     setEditing(null);
-    setForm({ username: '', password: '', full_name: '', email: '', role: 'SUPERVISOR', assigned_line_id: '' });
+    setForm({ username: '', password: '', full_name: '', email: '', role: 'LINE_MANAGER', assigned_line_id: '' });
     setShowForm(true);
   };
 
@@ -133,7 +133,7 @@ export default function Users() {
         <Input label="Email" type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
         <Input label={editing ? 'New Password (leave blank to keep)' : 'Password'} type="password" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} />
         <Select label="Role" value={form.role} onChange={e => setForm({ ...form, role: e.target.value })}
-          options={[{ value: 'SUPERVISOR', label: 'Supervisor' }, { value: 'ADMIN', label: 'Admin' }]} />
+          options={[{ value: 'LINE_MANAGER', label: 'Line Manager' }, { value: 'SUPERVISOR', label: 'Supervisor' }, { value: 'ADMIN', label: 'Admin' }]} />
         <Select label="Assigned Line" value={form.assigned_line_id} onChange={e => setForm({ ...form, assigned_line_id: e.target.value })}
           options={lines.map(l => ({ value: l.line_id, label: l.line_name }))} placeholder="No line" />
       </Modal>

@@ -5,6 +5,7 @@ export const postStage = async (payload: {
   product_id: number;
   production_date: string;
   qty_completed: number;
+  line_id?: number;
 }) => {
   const { data } = await apiClient.post('/stages', payload);
   return data;

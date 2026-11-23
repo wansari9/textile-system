@@ -16,16 +16,13 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    // 2. Check Password
-    let isMatch = false;
-    
-    // Quick bypass for the mock data we inserted earlier!
-    if (user.password_hash === 'hashed_pw_here' && password === 'admin123') {
-      isMatch = true;
-    } else {
-      // Normal secure check using bcrypt
-      isMatch = await bcrypt.compare(password, user.password_hash);
+    if (Number(user.is_active) !== 1) {
+      res.status(403).json({ success: false, message: 'Account is inactive' });
+      return;
     }
+
+    // 2. Check Password
+    const isMatch = await bcrypt.compare(password, user.password_hash);
 
     if (!isMatch) {
       res.status(401).json({ success: false, message: 'Invalid credentials' });
@@ -34,7 +31,12 @@ export const login = async (req: Request, res: Response): Promise<void> => {
 
     // 3. Generate JWT Token
     const token = jwt.sign(
-      { id: user.user_id, role: user.role, name: user.full_name },
+      {
+        id: user.user_id,
+        role: user.role,
+        name: user.full_name,
+        line_id: user.assigned_line_id ?? null,
+      },
       process.env.JWT_SECRET || 'super_secret_key_change_this_later',
       { expiresIn: '1d' } // Token lasts for 1 day
     );

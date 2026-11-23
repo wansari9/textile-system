@@ -1,7 +1,11 @@
 import { Router, Request, Response } from 'express';
 import pool from '../config/db';
+import { authenticateToken, requireRole } from '../middleware/auth';
 
 const router = Router();
+
+// Branch management is an admin-only area.
+router.use(authenticateToken, requireRole('ADMIN'));
 
 // GET /api/branches  (?all=true to include inactive)
 router.get('/', async (req: Request, res: Response) => {
@@ -104,7 +108,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
 // POST /api/branches/:id/daily  (upsert today's branch-wide target/actual)
 router.post('/:id/daily', async (req: Request, res: Response) => {
   const branchId = req.params.id;
-  const { production_date, daily_target, qty_produced, entered_by } = req.body;
+  const { production_date, daily_target, qty_produced } = req.body;
 
   if (!production_date) {
     return res.status(400).json({ success: false, message: 'production_date is required' });
@@ -121,8 +125,7 @@ router.post('/:id/daily', async (req: Request, res: Response) => {
          entered_by   = EXCLUDED.entered_by,
          entered_at    = CURRENT_TIMESTAMP
        RETURNING record_id, branch_id, production_date, daily_target, qty_produced, entered_by, entered_at`,
-      [branchId, production_date, daily_target ?? 0, qty_produced ?? 0, entered_by ?? null]
-      // TODO: once auth middleware exists, take entered_by from req.user.userId instead of the body
+      [branchId, production_date, daily_target ?? 0, qty_produced ?? 0, (req as any).user.id]
     );
     res.status(201).json({ success: true, data: result.rows[0] });
   } catch (error: any) {

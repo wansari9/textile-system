@@ -1,12 +1,44 @@
 import apiClient from '../lib/client';
 
-export const getDailyReport = async (date: string) => {
-  const { data } = await apiClient.get(`/reports/daily?date=${date}`);
+export type ReportSort =
+  | 'order_no'
+  | 'customer'
+  | 'product'
+  | 'line'
+  | 'produced'
+  | 'target'
+  | 'pct'
+  | 'date';
+
+export type SortDirection = 'asc' | 'desc';
+
+export const getDailyReport = async (date: string, sort?: ReportSort, dir?: SortDirection) => {
+  const params: Record<string, string> = { date };
+  if (sort) {
+    params.sort = sort;
+    params.dir = dir ?? 'asc';
+  }
+  const { data } = await apiClient.get('/reports/daily', { params });
   return data;
 };
 
-export const getWeeklyReport = async (start: string, end: string) => {
-  const { data } = await apiClient.get(`/reports/weekly?start=${start}&end=${end}`);
+export const getWeeklyReport = async (
+  start: string,
+  end: string,
+  sort?: ReportSort,
+  dir?: SortDirection
+) => {
+  const params: Record<string, string> = { start, end };
+  if (sort) {
+    params.sort = sort;
+    params.dir = dir ?? 'asc';
+  }
+  const { data } = await apiClient.get('/reports/weekly', { params });
+  return data;
+};
+
+export const getOverviewReport = async (date: string) => {
+  const { data } = await apiClient.get('/reports/overview', { params: { date } });
   return data;
 };
 

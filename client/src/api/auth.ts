@@ -12,7 +12,7 @@ interface LoginResponse {
     id: number;
     username: string;
     name: string;
-    role: 'ADMIN' | 'SUPERVISOR';
+    role: 'ADMIN' | 'LINE_MANAGER' | 'SUPERVISOR';
     line_id: number | null;
   };
 }

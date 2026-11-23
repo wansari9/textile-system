@@ -1,7 +1,11 @@
 import { Router, Request, Response } from 'express';
 import pool from '../config/db';
+import { authenticateToken, requireRole } from '../middleware/auth';
 
 const router = Router();
+
+// Customer management is an admin-only area.
+router.use(authenticateToken, requireRole('ADMIN'));
 
 // GET /api/customers  (?all=true to include inactive)
 router.get('/', async (req: Request, res: Response) => {

@@ -1,7 +1,7 @@
 import apiClient from '../lib/client';
 
-export const getLines = async () => {
-  const { data } = await apiClient.get('/lines');
+export const getLines = async (params?: { branch_id?: number; status?: string; line_type?: string }) => {
+  const { data } = await apiClient.get('/lines', { params });
   return data;
 };
 
@@ -20,12 +20,20 @@ export const assignProduct = async (id: number, payload: any) => {
   return data;
 };
 
-export const createLine = async (payload: { branch_id: number; line_name: string; status?: string }) => {
+export const createLine = async (payload: {
+  branch_id: number;
+  line_name: string;
+  status?: string;
+  line_type?: string;
+}) => {
   const { data } = await apiClient.post('/lines', payload);
   return data;
 };
 
-export const updateLine = async (id: number, payload: { branch_id?: number; line_name?: string; status?: string }) => {
+export const updateLine = async (
+  id: number,
+  payload: { branch_id?: number; line_name?: string; status?: string; line_type?: string }
+) => {
   const { data } = await apiClient.put(`/lines/${id}`, payload);
   return data;
 };

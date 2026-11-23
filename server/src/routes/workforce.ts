@@ -1,16 +1,27 @@
 import { Router, Request, Response } from 'express';
 import pool from '../config/db';
+import { authenticateToken } from '../middleware/auth';
 
 const router = Router();
 
+// Admins and line managers both record workforce, but a line manager is locked
+// to their own line.
+router.use(authenticateToken);
+
 // POST /api/workforce  (upsert today's headcount for a line — one row per line per day)
 router.post('/', async (req: Request, res: Response) => {
-  const { line_id, production_date, workers_required, workers_present, notes, recorded_by } = req.body;
+  const authUser = (req as any).user;
+  const admin = authUser.role === 'ADMIN';
+  const { production_date, workers_required, workers_present, notes } = req.body;
 
-  if (!line_id || !production_date || workers_present === undefined) {
+  const lineId: number | null = admin ? req.body.line_id ?? null : authUser.line_id;
+  if (!lineId) {
+    return res.status(403).json({ success: false, message: 'No production line is assigned to this account' });
+  }
+  if (!production_date || workers_present === undefined) {
     return res.status(400).json({
       success: false,
-      message: 'line_id, production_date, and workers_present are required',
+      message: 'production_date and workers_present are required',
     });
   }
 
@@ -26,7 +37,8 @@ router.post('/', async (req: Request, res: Response) => {
          recorded_by      = EXCLUDED.recorded_by,
          recorded_at       = CURRENT_TIMESTAMP
        RETURNING record_id, line_id, production_date, workers_required, workers_present, notes, recorded_by, recorded_at`,
-      [line_id, production_date, workers_required ?? null, workers_present, notes ?? null, recorded_by ?? null]
+      // recorded_by always comes from the token, never the body.
+      [lineId, production_date, workers_required ?? null, workers_present, notes ?? null, authUser.id]
     );
     res.status(201).json({ success: true, data: result.rows[0] });
   } catch (error: any) {
@@ -36,14 +48,23 @@ router.post('/', async (req: Request, res: Response) => {
 });
 
 // GET /api/workforce  (?line_id=&date=  or  ?line_id=&from=&to=)
+// Line managers only ever receive rows for their own line.
 router.get('/', async (req: Request, res: Response) => {
+  const authUser = (req as any).user;
+  const admin = authUser.role === 'ADMIN';
   const { line_id, date, from, to } = req.query;
+
+  const scopedLineId = admin ? line_id : authUser.line_id;
+  if (!admin && !scopedLineId) {
+    return res.json({ success: true, data: [] });
+  }
+
   try {
     const conditions: string[] = [];
     const params: any[] = [];
 
-    if (line_id) {
-      params.push(line_id);
+    if (scopedLineId) {
+      params.push(scopedLineId);
       conditions.push(`dw.line_id = $${params.length}`);
     }
     if (date) {

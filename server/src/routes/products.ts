@@ -1,10 +1,16 @@
 import { Router, Request, Response } from 'express';
 import pool from '../config/db';
+import { authenticateToken, requireRole } from '../middleware/auth';
 
 const router = Router();
 
+// Product/order records are managed by admins only.
+router.use(authenticateToken, requireRole('ADMIN'));
+
 const PRODUCT_COLUMNS = `product_id, customer_id, product_name, style_code, color, size,
-  order_quantity, daily_target, status, start_date, due_date, created_at`;
+  gender, order_no, order_date, order_quantity, daily_target, status, start_date, due_date, created_at`;
+
+const GENDERS = ['MEN', 'WOMEN', 'BOYS', 'GIRLS', 'KIDS', 'UNISEX'];
 
 // GET /api/products  (?customer_id=&status= optional filters)
 router.get('/', async (req: Request, res: Response) => {
@@ -85,8 +91,8 @@ router.get('/:id/progress', async (req: Request, res: Response) => {
 // POST /api/products
 router.post('/', async (req: Request, res: Response) => {
   const {
-    customer_id, product_name, style_code, color, size,
-    order_quantity, daily_target, status, start_date, due_date,
+    customer_id, product_name, style_code, color, size, gender,
+    order_quantity, daily_target, status, start_date, due_date, order_date,
   } = req.body;
 
   if (!customer_id || !product_name || !order_quantity || !daily_target) {
@@ -96,15 +102,21 @@ router.post('/', async (req: Request, res: Response) => {
     });
   }
 
+  const normalizedGender = gender ? String(gender).toUpperCase() : 'UNISEX';
+  if (!GENDERS.includes(normalizedGender)) {
+    return res.status(400).json({ success: false, message: `gender must be one of: ${GENDERS.join(', ')}` });
+  }
+
   try {
     const result = await pool.query(
       `INSERT INTO products
-         (customer_id, product_name, style_code, color, size, order_quantity, daily_target, status, start_date, due_date)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, COALESCE($8, 'PENDING'), $9, $10)
+         (customer_id, product_name, style_code, color, size, gender,
+          order_quantity, daily_target, status, start_date, due_date, order_date)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, COALESCE($9, 'PENDING'), $10, $11, COALESCE($12, CURRENT_DATE))
        RETURNING ${PRODUCT_COLUMNS}`,
       [
-        customer_id, product_name, style_code ?? null, color ?? null, size ?? null,
-        order_quantity, daily_target, status ?? null, start_date ?? null, due_date ?? null,
+        customer_id, product_name, style_code ?? null, color ?? null, size ?? null, normalizedGender,
+        order_quantity, daily_target, status ?? null, start_date ?? null, due_date ?? null, order_date ?? null,
       ]
     );
     res.status(201).json({ success: true, data: result.rows[0] });
@@ -117,9 +129,14 @@ router.post('/', async (req: Request, res: Response) => {
 // PUT /api/products/:id
 router.put('/:id', async (req: Request, res: Response) => {
   const {
-    product_name, style_code, color, size,
-    order_quantity, daily_target, status, start_date, due_date,
+    product_name, style_code, color, size, gender,
+    order_quantity, daily_target, status, start_date, due_date, order_date,
   } = req.body;
+
+  const normalizedGender = gender ? String(gender).toUpperCase() : null;
+  if (normalizedGender && !GENDERS.includes(normalizedGender)) {
+    return res.status(400).json({ success: false, message: `gender must be one of: ${GENDERS.join(', ')}` });
+  }
 
   try {
     const result = await pool.query(
@@ -132,10 +149,15 @@ router.put('/:id', async (req: Request, res: Response) => {
            daily_target   = COALESCE($6, daily_target),
            status         = COALESCE($7, status),
            start_date     = COALESCE($8, start_date),
-           due_date       = COALESCE($9, due_date)
-       WHERE product_id = $10
+           due_date       = COALESCE($9, due_date),
+           gender         = COALESCE($10, gender),
+           order_date     = COALESCE($11, order_date)
+       WHERE product_id = $12
        RETURNING ${PRODUCT_COLUMNS}`,
-      [product_name, style_code, color, size, order_quantity, daily_target, status, start_date, due_date, req.params.id]
+      [
+        product_name, style_code, color, size, order_quantity, daily_target,
+        status, start_date, due_date, normalizedGender, order_date, req.params.id,
+      ]
     );
     if (!result.rows[0]) {
       return res.status(404).json({ success: false, message: 'Product not found' });

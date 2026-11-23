@@ -1,8 +1,12 @@
 import { Router, Request, Response } from 'express';
 import bcrypt from 'bcrypt';
 import pool from '../config/db';
+import { authenticateToken, requireRole } from '../middleware/auth';
 
 const router = Router();
+
+// User administration is an admin-only area.
+router.use(authenticateToken, requireRole('ADMIN'));
 
 const SAFE_COLUMNS = `user_id, username, full_name, email, role, assigned_line_id, is_active, created_at`;
 // password_hash is never selected back out — keep it out of every response.
@@ -65,8 +69,8 @@ router.post('/', async (req: Request, res: Response) => {
       message: 'username, password, full_name, and role are required',
     });
   }
-  if (!['ADMIN', 'SUPERVISOR'].includes(role)) {
-    return res.status(400).json({ success: false, message: "role must be 'ADMIN' or 'SUPERVISOR'" });
+  if (!['ADMIN', 'LINE_MANAGER', 'SUPERVISOR'].includes(role)) {
+    return res.status(400).json({ success: false, message: "role must be 'ADMIN', 'LINE_MANAGER', or 'SUPERVISOR'" });
   }
 
   try {
@@ -92,8 +96,8 @@ router.post('/', async (req: Request, res: Response) => {
 router.put('/:id', async (req: Request, res: Response) => {
   const { full_name, email, role, assigned_line_id, is_active } = req.body;
 
-  if (role && !['ADMIN', 'SUPERVISOR'].includes(role)) {
-    return res.status(400).json({ success: false, message: "role must be 'ADMIN' or 'SUPERVISOR'" });
+  if (role && !['ADMIN', 'LINE_MANAGER', 'SUPERVISOR'].includes(role)) {
+    return res.status(400).json({ success: false, message: "role must be 'ADMIN', 'LINE_MANAGER', or 'SUPERVISOR'" });
   }
 
   try {
