@@ -10,12 +10,21 @@ router.use(authenticateToken);
 
 const LINE_TYPES = ['SEWING', 'CUTTING'];
 
-// GET /api/lines  (?branch_id=&status=&line_type= optional filters)
+const localISODate = (): string => {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+};
+
+// GET /api/lines  (?branch_id=&status=&line_type=&date= optional filters)
+// Also returns the active order and the score for the requested day so list
+// screens don't need one request per line.
 router.get('/', async (req: Request, res: Response) => {
-  const { branch_id, status, line_type } = req.query;
+  const { branch_id, status, line_type, date } = req.query;
+  const scoreDate = typeof date === 'string' && date ? date : localISODate();
   try {
+    // $1 is always the score/report date; filters follow.
     const conditions: string[] = [];
-    const params: any[] = [];
+    const params: any[] = [scoreDate];
 
     if (branch_id) {
       params.push(branch_id);
@@ -42,11 +51,26 @@ router.get('/', async (req: Request, res: Response) => {
 
     const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
     const result = await pool.query(
-      `SELECT pl.line_id, pl.branch_id, b.branch_name, pl.line_name, pl.line_type, pl.status, pl.created_at
+      `SELECT pl.line_id, pl.branch_id, b.branch_name, pl.line_name, pl.line_type, pl.status, pl.created_at,
+              s.total_produced AS produced_today, s.daily_target AS target_today, s.score::float8 AS score,
+              la.assignment_id, la.daily_target AS assigned_target,
+              p.product_id, p.product_name, p.order_no, p.gender,
+              c.customer_id, c.customer_name
        FROM production_lines pl
        JOIN branches b ON b.branch_id = pl.branch_id
+       LEFT JOIN vw_line_daily_score s
+              ON s.line_id = pl.line_id AND s.production_date = $1
+       LEFT JOIN LATERAL (
+         SELECT la2.assignment_id, la2.daily_target, la2.product_id
+         FROM line_assignments la2
+         WHERE la2.line_id = pl.line_id AND la2.status = 'ACTIVE'
+         ORDER BY la2.start_date DESC, la2.assignment_id DESC
+         LIMIT 1
+       ) la ON true
+       LEFT JOIN products p ON p.product_id = la.product_id
+       LEFT JOIN customers c ON c.customer_id = p.customer_id
        ${whereClause}
-        ORDER BY NULLIF(regexp_replace(pl.line_name, '[^0-9]', '', 'g'), '')::int`,
+       ORDER BY pl.line_type, NULLIF(regexp_replace(pl.line_name, '[^0-9]', '', 'g'), '')::int, pl.line_name`,
       params
     );
     res.json({ success: true, data: result.rows });

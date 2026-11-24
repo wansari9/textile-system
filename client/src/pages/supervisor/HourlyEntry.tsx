@@ -20,7 +20,10 @@ export default function HourlyEntry() {
   const loadData = async (date: string) => {
     setLoaded(false);
     const res = await getLines();
-    if (!res.success) return;
+    if (!res.success) {
+      setLoaded(true);
+      return;
+    }
     const enriched = await Promise.all(
       res.data.filter((l: any) => l.status === 'ACTIVE').map(async (line: any) => {
         try {
@@ -72,7 +75,12 @@ export default function HourlyEntry() {
   };
 
   useEffect(() => {
-    loadData(selectedDate);
+    loadData(selectedDate).catch(err => {
+      // A failed load (including an expired session) should not become an
+      // unhandled rejection; the API layer handles the redirect.
+      console.error('Failed to load hourly entry data', err);
+      setLoaded(true);
+    });
   }, [selectedDate]);
 
   const updateEntry = (lineId: number, hour: number, field: 'produced' | 'defect', value: number) => {

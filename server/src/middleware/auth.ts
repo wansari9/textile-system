@@ -36,7 +36,7 @@ export const authenticateToken = async (
     const userId = payload.id ?? payload.userId;
 
     if (!userId) {
-      res.status(403).json({ success: false, message: 'Invalid token' });
+      res.status(401).json({ success: false, message: 'Invalid token' });
       return;
     }
 
@@ -63,7 +63,7 @@ export const authenticateToken = async (
     next();
   } catch (error: any) {
     if (error?.name === 'TokenExpiredError' || error?.name === 'JsonWebTokenError') {
-      res.status(403).json({ success: false, message: 'Invalid token' });
+      res.status(401).json({ success: false, message: 'Invalid token' });
       return;
     }
     console.error('Auth middleware error:', error);

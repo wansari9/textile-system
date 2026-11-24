@@ -35,6 +35,8 @@ export const colors = {
   risk: '#D92D20',
   riskSoft: '#FDECEA',
   riskLight: '#FFB4AB',
+  blue: '#7AA2C4',
+  orange: '#F99D45'
 } as const;
 
 export const fonts = {

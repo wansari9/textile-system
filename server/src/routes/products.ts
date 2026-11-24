@@ -91,7 +91,7 @@ router.get('/:id/progress', async (req: Request, res: Response) => {
 // POST /api/products
 router.post('/', async (req: Request, res: Response) => {
   const {
-    customer_id, product_name, style_code, color, size, gender,
+    customer_id, order_no, product_name, style_code, color, size, gender,
     order_quantity, daily_target, status, start_date, due_date, order_date,
   } = req.body;
 
@@ -110,17 +110,24 @@ router.post('/', async (req: Request, res: Response) => {
   try {
     const result = await pool.query(
       `INSERT INTO products
-         (customer_id, product_name, style_code, color, size, gender,
+         (order_no, customer_id, product_name, style_code, color, size, gender,
           order_quantity, daily_target, status, start_date, due_date, order_date)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, COALESCE($9, 'PENDING'), $10, $11, COALESCE($12, CURRENT_DATE))
+       VALUES (
+         COALESCE($1, 'ORD-' || LPAD(nextval('order_no_seq')::text, 5, '0')),
+         $2, $3, $4, $5, $6, $7, $8, $9, $10, COALESCE($11, 'PENDING'), $12, $13, COALESCE($14, CURRENT_DATE)
+       )
        RETURNING ${PRODUCT_COLUMNS}`,
       [
+        order_no ? String(order_no).trim() : null,
         customer_id, product_name, style_code ?? null, color ?? null, size ?? null, normalizedGender,
         order_quantity, daily_target, status ?? null, start_date ?? null, due_date ?? null, order_date ?? null,
       ]
     );
     res.status(201).json({ success: true, data: result.rows[0] });
   } catch (error: any) {
+    if (error.code === '23505') {
+      return res.status(409).json({ success: false, message: 'That order number is already in use' });
+    }
     console.error('Create product error:', error);
     res.status(500).json({ success: false, message: 'Failed to create product' });
   }
@@ -129,7 +136,7 @@ router.post('/', async (req: Request, res: Response) => {
 // PUT /api/products/:id
 router.put('/:id', async (req: Request, res: Response) => {
   const {
-    product_name, style_code, color, size, gender,
+    order_no, product_name, style_code, color, size, gender,
     order_quantity, daily_target, status, start_date, due_date, order_date,
   } = req.body;
 
@@ -151,12 +158,14 @@ router.put('/:id', async (req: Request, res: Response) => {
            start_date     = COALESCE($8, start_date),
            due_date       = COALESCE($9, due_date),
            gender         = COALESCE($10, gender),
-           order_date     = COALESCE($11, order_date)
-       WHERE product_id = $12
+           order_date     = COALESCE($11, order_date),
+           order_no       = COALESCE($12, order_no)
+       WHERE product_id = $13
        RETURNING ${PRODUCT_COLUMNS}`,
       [
         product_name, style_code, color, size, order_quantity, daily_target,
-        status, start_date, due_date, normalizedGender, order_date, req.params.id,
+        status, start_date, due_date, normalizedGender, order_date,
+        order_no ? String(order_no).trim() : null, req.params.id,
       ]
     );
     if (!result.rows[0]) {
@@ -164,6 +173,9 @@ router.put('/:id', async (req: Request, res: Response) => {
     }
     res.json({ success: true, data: result.rows[0] });
   } catch (error: any) {
+    if (error.code === '23505') {
+      return res.status(409).json({ success: false, message: 'That order number is already in use' });
+    }
     console.error('Update product error:', error);
     res.status(500).json({ success: false, message: 'Failed to update product' });
   }

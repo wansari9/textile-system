@@ -1,9 +1,12 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { login } from '../../api/auth';
+import { isAxiosError } from 'axios';
+import { login, getMe } from '../../api/auth';
 import { Button, Input } from '../../components/ui';
 import { Factory } from 'lucide-react';
 import { auth } from '../../design';
+import { homeForRole } from '../../domain';
+import { clearSession, getSessionUser, getToken, saveSession } from '../../lib/session';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -12,21 +15,42 @@ export default function Login() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // Already signed in with a still-valid token? Go straight to the landing page.
+  useEffect(() => {
+    if (!getToken() || !getSessionUser()) return;
+
+    let active = true;
+    getMe()
+      .then(() => {
+        const user = getSessionUser();
+        if (active && user) navigate(homeForRole(user.role), { replace: true });
+      })
+      .catch(() => {
+        clearSession();
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [navigate]);
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
     try {
       const res = await login({ username, password });
-      if (res.success) {
-        localStorage.setItem('token', res.token);
-        localStorage.setItem('user', JSON.stringify(res.user));
-        navigate('/');
+      if (res.success && res.token && res.user) {
+        saveSession(res.token, res.user);
+        navigate(homeForRole(res.user.role), { replace: true });
+      } else {
+        setError('Unexpected response from the server. Please try again.');
       }
-    } catch {
-      const devUser = { name: 'Dev User', role: 'ADMIN' };
-      localStorage.setItem('user', JSON.stringify(devUser));
-      navigate('/');
+    } catch (err) {
+      const message = isAxiosError(err)
+        ? (err.response?.data as { message?: string } | undefined)?.message
+        : undefined;
+      setError(message || 'Unable to sign in. Check your connection and try again.');
     } finally {
       setLoading(false);
     }

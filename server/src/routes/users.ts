@@ -11,6 +11,14 @@ router.use(authenticateToken, requireRole('ADMIN'));
 const SAFE_COLUMNS = `user_id, username, full_name, email, role, assigned_line_id, is_active, created_at`;
 // password_hash is never selected back out — keep it out of every response.
 
+const VALID_ROLES = ['ADMIN', 'LINE_MANAGER', 'SUPERVISOR'];
+const LINE_MANAGER_ROLES = ['LINE_MANAGER', 'SUPERVISOR'];
+
+const lineExists = async (lineId: number): Promise<boolean> => {
+  const result = await pool.query(`SELECT 1 FROM production_lines WHERE line_id = $1`, [lineId]);
+  return result.rowCount === 1;
+};
+
 // GET /api/users  (?role=&line_id=&all=true to include inactive)
 router.get('/', async (req: Request, res: Response) => {
   const { role, line_id, all } = req.query;
@@ -73,7 +81,17 @@ router.post('/', async (req: Request, res: Response) => {
     return res.status(400).json({ success: false, message: "role must be 'ADMIN', 'LINE_MANAGER', or 'SUPERVISOR'" });
   }
 
+  // A line manager without a line cannot enter anything, so refuse to create
+  // one. Legacy SUPERVISOR accounts follow the same rule.
+  if (LINE_MANAGER_ROLES.includes(role) && !assigned_line_id) {
+    return res.status(400).json({ success: false, message: 'A line manager must be assigned to a production line' });
+  }
+
   try {
+    if (assigned_line_id && !(await lineExists(Number(assigned_line_id)))) {
+      return res.status(400).json({ success: false, message: 'assigned_line_id does not match a production line' });
+    }
+
     const passwordHash = await bcrypt.hash(password, 10);
     const result = await pool.query(
       `INSERT INTO users (username, password_hash, full_name, email, role, assigned_line_id)
@@ -101,6 +119,21 @@ router.put('/:id', async (req: Request, res: Response) => {
   }
 
   try {
+    const current = await pool.query(`SELECT role, assigned_line_id FROM users WHERE user_id = $1`, [req.params.id]);
+    if (!current.rows[0]) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    const nextRole = role ?? current.rows[0].role;
+    const nextLine = assigned_line_id ?? current.rows[0].assigned_line_id;
+
+    if (LINE_MANAGER_ROLES.includes(nextRole) && !nextLine) {
+      return res.status(400).json({ success: false, message: 'A line manager must be assigned to a production line' });
+    }
+    if (assigned_line_id && !(await lineExists(Number(assigned_line_id)))) {
+      return res.status(400).json({ success: false, message: 'assigned_line_id does not match a production line' });
+    }
+
     const result = await pool.query(
       `UPDATE users
        SET full_name        = COALESCE($1, full_name),

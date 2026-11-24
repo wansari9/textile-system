@@ -1,15 +1,16 @@
 import { useState, useEffect, Fragment } from 'react';
 import { getCustomers, createCustomer, updateCustomer, deleteCustomer } from '../../api/customers';
-import { getProductsByCustomer } from '../../api/products';
+import { getOrders } from '../../api/orders';
 import { Button, Card, Input, Textarea, Badge, Modal } from '../../components/ui';
 import { useToast } from '../../components/ui/Toast';
 import { ChevronRight, ChevronDown } from 'lucide-react';
 import { page, table } from '../../design';
+import { GENDER_LABELS } from '../../domain';
 
 export default function Customers() {
   const [customers, setCustomers] = useState<any[]>([]);
   const [expandedId, setExpandedId] = useState<number | null>(null);
-  const [productsMap, setProductsMap] = useState<Record<number, any[]>>({});
+  const [ordersMap, setOrdersMap] = useState<Record<number, any[]>>({});
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<any | null>(null);
   const [form, setForm] = useState({ customer_name: '', contact_person: '', phone: '', email: '', address: '' });
@@ -30,10 +31,10 @@ export default function Customers() {
       return;
     }
     setExpandedId(customerId);
-    if (!productsMap[customerId]) {
-      const res = await getProductsByCustomer(customerId);
+    if (!ordersMap[customerId]) {
+      const res = await getOrders({ customer_id: customerId });
       if (res.success) {
-        setProductsMap(prev => ({ ...prev, [customerId]: res.data }));
+        setOrdersMap(prev => ({ ...prev, [customerId]: res.data }));
       }
     }
   };
@@ -80,8 +81,8 @@ export default function Customers() {
     <div className={page.shell}>
       <div className={page.header}>
         <div>
-          <h1 className={page.title}>Customers &amp; Products</h1>
-          <p className={page.subtitle}>Manage customer accounts and their product catalog</p>
+          <h1 className={page.title}>Customers</h1>
+          <p className={page.subtitle}>Account details and read-only order history</p>
         </div>
         <Button onClick={openCreate}>Add Customer</Button>
       </div>

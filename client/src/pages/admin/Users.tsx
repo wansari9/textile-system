@@ -4,6 +4,7 @@ import { getLines } from '../../api/lines';
 import { Button, Card, Input, Select, Badge, Modal } from '../../components/ui';
 import { useToast } from '../../components/ui/Toast';
 import { page, table } from '../../design';
+import { ROLE_LABELS } from '../../domain';
 
 export default function Users() {
   const [users, setUsers] = useState<any[]>([]);
@@ -99,7 +100,7 @@ export default function Users() {
                   <td className="px-5 py-3 font-medium text-ink">{user.username}</td>
                   <td className="px-5 py-3 text-ink-soft">{user.full_name}</td>
                   <td className="px-5 py-3">
-                    <Badge status={user.role === 'ADMIN' ? 'default' : 'on_target'} size="sm">{user.role}</Badge>
+                    <Badge status={user.role === 'ADMIN' ? 'default' : 'on_target'} size="sm">{ROLE_LABELS[user.role] ?? user.role}</Badge>
                   </td>
                   <td className="px-5 py-3 text-ink-soft">
                     {lines.find(l => l.line_id === user.assigned_line_id)?.line_name || '-'}
@@ -133,7 +134,7 @@ export default function Users() {
         <Input label="Email" type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
         <Input label={editing ? 'New Password (leave blank to keep)' : 'Password'} type="password" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} />
         <Select label="Role" value={form.role} onChange={e => setForm({ ...form, role: e.target.value })}
-          options={[{ value: 'LINE_MANAGER', label: 'Line Manager' }, { value: 'SUPERVISOR', label: 'Supervisor' }, { value: 'ADMIN', label: 'Admin' }]} />
+          options={[{ value: 'LINE_MANAGER', label: 'Line Manager' }, { value: 'ADMIN', label: 'Admin' }]} />
         <Select label="Assigned Line" value={form.assigned_line_id} onChange={e => setForm({ ...form, assigned_line_id: e.target.value })}
           options={lines.map(l => ({ value: l.line_id, label: l.line_name }))} placeholder="No line" />
       </Modal>

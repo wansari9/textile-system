@@ -20,6 +20,8 @@ import {
 import { useState, useMemo } from 'react';
 import { addDays, toISODate } from '../lib/date';
 import { layout } from '../design';
+import { ROLE_LABELS, isAdminRole, isLineManagerRole } from '../domain';
+import { clearSession, getSessionUser } from '../lib/session';
 
 interface NavItem {
   name: string;
@@ -30,28 +32,28 @@ interface NavItem {
 }
 
 const allNavItems: NavItem[] = [
-  { name: 'Dashboard', path: '/', icon: LayoutDashboard, roles: ['ADMIN', 'LINE_MANAGER', 'SUPERVISOR'] },
+  { name: 'Dashboard', path: '/', icon: LayoutDashboard, roles: ['ADMIN'] },
+  { name: 'Orders', path: '/orders', icon: Package, roles: ['ADMIN'] },
   { name: 'Production Lines', path: '/lines', icon: Factory, roles: ['ADMIN'] },
-  { name: 'Hourly Entry', path: '/entry', icon: ClipboardList, roles: ['ADMIN', 'LINE_MANAGER', 'SUPERVISOR'] },
-  { name: 'Cutting / Packing', path: '/stages', icon: PackageSearch, roles: ['ADMIN', 'LINE_MANAGER', 'SUPERVISOR'] },
-  { name: 'Quality Control', path: '/quality', icon: ShieldCheck, roles: ['ADMIN', 'LINE_MANAGER', 'SUPERVISOR'] },
-  { name: 'Branches', path: '/branches', icon: GitBranch, roles: ['ADMIN'] },
-  { name: 'Products', path: '/products', icon: Package, roles: ['ADMIN'] },
+  { name: 'Daily Production', path: '/stages', icon: PackageSearch, roles: ['ADMIN'] },
+  { name: 'Quality', path: '/quality', icon: ShieldCheck, roles: ['ADMIN'] },
   { name: 'Customers', path: '/customers', icon: Building2, roles: ['ADMIN'] },
+  { name: 'Branches', path: '/branches', icon: GitBranch, roles: ['ADMIN'] },
   { name: 'Reports', path: '/reports', icon: BarChart3, roles: ['ADMIN'], separator: true },
   { name: 'Users', path: '/users', icon: UsersIcon, roles: ['ADMIN'] },
+  { name: 'Hourly Entry', path: '/entry', icon: ClipboardList, roles: ['LINE_MANAGER', 'SUPERVISOR'] },
 ];
 
 const pageTitles: Record<string, string> = {
   '/': 'Floor overview',
+  '/orders': 'Orders',
   '/entry': 'Hourly Production Entry',
   '/lines': 'Production Lines',
-  '/products': 'Products',
-  '/customers': 'Customers & Products',
+  '/customers': 'Customers & Orders',
   '/branches': 'Satellite Branches',
   '/reports': 'Production Reports',
   '/users': 'User Management',
-  '/stages': 'Process Stages',
+  '/stages': 'Daily Production',
   '/quality': 'Quality Control',
 };
 
@@ -59,21 +61,17 @@ export default function MainLayout() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  // Read the user saved at login instead of hardcoding an admin.
-  const [user] = useState<any>(() => {
-    try {
-      const stored = localStorage.getItem('user');
-      return stored ? JSON.parse(stored) : { name: 'Dev User', role: 'ADMIN' };
-    } catch {
-      return { name: 'Dev User', role: 'ADMIN' };
-    }
-  });
+  // Session user is guaranteed by RequireAuth; null is only a brief safety net.
+  const [user] = useState(() => getSessionUser());
 
-  const isSupervisor = user?.role === 'SUPERVISOR' || user?.role === 'LINE_MANAGER';
-  const [collapsed, setCollapsed] = useState(isSupervisor);
+  const isLineManager = isLineManagerRole(user?.role);
+  const [collapsed, setCollapsed] = useState(isLineManager);
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  const navItems = useMemo(() => allNavItems.filter(item => item.roles.includes(user?.role || 'ADMIN')), [user]);
+  const navItems = useMemo(
+    () => allNavItems.filter(item => item.roles.includes(user?.role || '')),
+    [user]
+  );
   const pageTitle = pageTitles[location.pathname] || 'AmirtexOS';
   const initial = user?.name?.charAt(0)?.toUpperCase() || 'U';
 
@@ -85,8 +83,7 @@ export default function MainLayout() {
   ];
 
   const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
+    clearSession();
     navigate('/login');
   };
 
@@ -137,8 +134,8 @@ export default function MainLayout() {
           })}
         </nav>
 
-        {/* Saved views */}
-        {!collapsed && (
+        {/* Saved views (admin dashboard shortcuts) */}
+        {!collapsed && isAdminRole(user?.role) && (
           <div className="mx-2 mb-3 rounded-xl border border-rule bg-canvas/70 p-3">
             <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-[0.16em] text-muted">
               <Bookmark size={12} /> Saved views
@@ -187,7 +184,7 @@ export default function MainLayout() {
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium truncate">{user.name}</p>
                     <p className="text-[11px] text-white/50">
-                      {user.role === 'ADMIN' ? 'Administrator' : 'Supervisor'}
+                      {ROLE_LABELS[user?.role ?? ''] ?? 'User'}
                     </p>
                   </div>
                   <button
@@ -233,7 +230,7 @@ export default function MainLayout() {
                 </div>
                 <div className="text-sm leading-tight">
                   <p className="font-medium text-ink">{user.name}</p>
-                  <p className="text-[11px] text-muted">{user.role === 'ADMIN' ? 'Administrator' : 'Supervisor'}</p>
+                  <p className="text-[11px] text-muted">{ROLE_LABELS[user?.role ?? ''] ?? 'User'}</p>
                 </div>
               </div>
             )}
