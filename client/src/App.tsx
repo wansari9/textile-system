@@ -41,7 +41,7 @@ function App() {
                 <Route path="users" element={<Users />} />
               </Route>
 
-              {/* Old links keep working until the Orders page lands. */}
+              {/* Legacy /products links redirect to the Orders page. */}
               <Route path="products" element={<Navigate to="/orders" replace />} />
 
               <Route path="*" element={<HomeRedirect />} />

@@ -5,7 +5,7 @@
 
 **Last scanned:** 2026-11-22
 **Repo root:** `textile-system/`
-**Purpose:** A production management system for textile factories — hourly line production, workforce, cutting/packing/ironing stages, quality control, branches, customers/products, users, and reporting.
+**Purpose:** A production management system for textile factories - hourly line production, workforce, cutting/stitching/ironing/packing stages, quality control, branches, customers, orders with gender and line scores, users, and reporting.
 
 ---
 
@@ -61,25 +61,26 @@
 Core concepts:
 
 - **Branch** — a factory site (`Main Factory`, satellites).
-- **Production Line** — belongs to a branch; runs one active product at a time.
-- **Customer** — the buyer.
-- **Product** — a customer order/style with `order_quantity` and `daily_target`.
-- **Line Assignment** — links a line to a product with a daily target and date range. A line has at most **one active assignment**; a DB trigger auto-closes the previous one.
+- **Production Line** — belongs to a branch; `line_type` is `SEWING` or `CUTTING`. Sewing lines run one active order at a time; cutting lines record daily cutting output.
+- **Customer** — the buyer account.
+- **Order** — stored in `products`: one row is one customer order with `order_no`, `order_date`, `gender`, `order_quantity` and `daily_target`. The UI calls these rows **Orders**.
+- **Line Assignment** — links a sewing line to an order with a daily target and date range. A line has at most **one active assignment**; a DB trigger auto-closes the previous one.
 - **Hourly Production** — per line, per date, per hour (1–12): produced qty and defects.
 - **Daily Workforce** — per line, per date: workers required, present, free-text notes.
-- **Process Stages** — daily Cutting / Packing / Ironing quantities per product.
+- **Process Stages** — daily Cutting (per cutting line) / Stitching / Ironing / Packing quantities per order.
 - **Quality Checks** — daily pieces checked and faults per customer.
 - **Branch Daily Production** — branch-level target vs produced (separate from line-level hourly data).
-- **Reports** — SQL views aggregate daily/weekly/company/line/efficiency/quality data.
+- **Line score** — `min(100, produced ÷ target × 100)` per line and day; blank when no target.
+- **Reports** — SQL views aggregate daily/weekly/company/line/efficiency/quality/order data.
 
 Two user roles:
 
-| Role | Intended access |
+| Role | Access |
 |---|---|
-| `ADMIN` | Everything: dashboard, lines, branches, products, customers, reports, users |
-| `SUPERVISOR` | Dashboard, Hourly Entry, Cutting/Packing, Quality Control (intended) |
+| `ADMIN` | Everything: dashboard, orders, lines, daily production, quality, customers, branches, reports, users |
+| `LINE_MANAGER` | Hourly Entry for their assigned line (legacy `SUPERVISOR` accounts still work) |
 
-> **Current state:** authentication is implemented but **not enforced** on most API routes, and the UI layout currently hardcodes an ADMIN dev user. See [Known Issues](#14-known-issues--gotchas).
+Authentication is enforced on every router. Admin routers require `requireRole('ADMIN')`; hourly production and workforce entry are line-scoped for line managers. See [§7.3 Auth](#73-auth).
 
 ---
 
@@ -149,32 +150,35 @@ textile-system/
 │       ├── App.tsx               # Router + ToastProvider
 │       ├── design.ts             # ← SINGLE SOURCE OF TRUTH: tokens, status rules, component styles, generated CSS
 │       ├── index.css             # Intentionally empty stub; replaced by design.ts at build time
-│       ├── api/                  # One module per backend resource (11 files)
+│       ├── api/                  # One module per backend resource (12 files)
+│       ├── auth/guards.tsx       # RequireAuth / RequireAdmin
+│       ├── domain.ts             # Roles, genders, line types, stage tabs, labels
 │       ├── components/
 │       │   ├── ui/               # Design system primitives
 │       │   ├── production/       # ProductionBar, StatusBadge
 │       │   ├── HourlyGrid.tsx    # 12-hour × lines entry grid
-│       │   └── ReportTable.tsx   # Table + CSV export
+│       │   ├── QualityForm.tsx   # Shared quality tally form
+│       │   └── ReportTable.tsx   # Table + CSV export + sortable headers
 │       ├── layouts/MainLayout.tsx# Sidebar + header shell
-│       ├── lib/client.ts         # Axios instance + JWT interceptor
+│       ├── lib/client.ts         # Axios instance + JWT interceptor + 401 cleanup
+│       ├── lib/session.ts        # Stored session read/write/clear
 │       └── pages/
 │           ├── auth/Login.tsx
-│           ├── admin/            # Dashboard, Lines, Products, Customers, Branches, Reports, Users
+│           ├── admin/            # Dashboard, Orders, Lines, Customers, Branches, Reports, Users
 │           └── supervisor/       # HourlyEntry, ProcessStages, Quality
 │
 └── server/                       # Express + TypeScript API
     ├── .env                      # PORT, PG_*, JWT_SECRET
     ├── package.json              # dev / build / start / seed scripts
     ├── tsconfig.json             # strict, CommonJS, src → dist
-    ├── migrations/
-    │   └── 001_add_workforce_notes.sql
+    ├── migrations/               # 001–007, applied manually in filename order
     └── src/
         ├── index.ts              # App entry: middleware, /api/test-db, route mounts, listen
         ├── seed.ts               # Admin user, branches, lines, demo customer/product
         ├── config/db.ts          # pg Pool + query helper
-        ├── middleware/auth.ts    # JWT Bearer verification
+        ├── middleware/auth.ts    # JWT Bearer verification + role/line guards
         ├── controllers/          # authController, productionController
-        └── routes/               # 11 routers (most logic lives here)
+        └── routes/               # 12 routers (most logic lives here)
 ```
 
 ---
@@ -262,7 +266,7 @@ erDiagram
 | `password_hash` | VARCHAR(255) | bcrypt hash |
 | `full_name` | VARCHAR(100) | NOT NULL |
 | `email` | VARCHAR(150) | nullable |
-| `role` | VARCHAR(20) | `ADMIN` \| `SUPERVISOR` |
+| `role` | VARCHAR(20) | `ADMIN` \| `LINE_MANAGER` (legacy `SUPERVISOR` still accepted) |
 | `assigned_line_id` | INTEGER | FK → `production_lines.line_id` |
 | `is_active` | SMALLINT | 0/1, default 1 |
 | `created_at` | TIMESTAMP | |
@@ -279,6 +283,9 @@ Branch-wide target/actual per day. Unique on `(branch_id, production_date)`.
 | Column | Type | Notes |
 |---|---|---|
 | `product_id` | SERIAL PK | |
+| `order_no` | VARCHAR(30) | UNIQUE, default `ORD-` + zero-padded `order_no_seq` |
+| `order_date` | DATE | Defaults to `CURRENT_DATE` |
+| `gender` | VARCHAR(10) | `MEN` \| `WOMEN` \| `BOYS` \| `GIRLS` \| `KIDS` \| `UNISEX` (default) |
 | `customer_id` | INTEGER | FK → customers |
 | `product_name` | VARCHAR(150) | required |
 | `style_code` | VARCHAR(50) | |
@@ -290,10 +297,12 @@ Branch-wide target/actual per day. Unique on `(branch_id, production_date)`.
 | `start_date`, `due_date` | DATE | |
 | `created_at` | TIMESTAMP | |
 
-Index: `ix_products_customer (customer_id)`.
+Indexes: `ix_products_customer (customer_id)`, `ux_products_order_no (order_no)`, `ix_products_order_date (order_date)`.
+In this system one product row is one customer order, so the UI labels these rows **Orders**.
 
 #### `production_lines`
-`line_id` PK, `branch_id` FK, `line_name` (UNIQUE), `status` (`ACTIVE` \| `MAINTENANCE` \| `INACTIVE`), `created_at`.
+`line_id` PK, `branch_id` FK, `line_name` (UNIQUE), `line_type` (`SEWING` \| `CUTTING`, default `SEWING`), `status` (`ACTIVE` \| `MAINTENANCE` \| `INACTIVE`), `created_at`.
+Migration `003_line_types.sql` seeds `Cutting 1`, `Cutting 2`, `Cutting 3` under the main branch.
 
 #### `line_assignments`
 Links a line to a product for a period.
@@ -333,8 +342,8 @@ Migration [`001_add_workforce_notes.sql`](server/migrations/001_add_workforce_no
 **Defined but never written to by application code.**
 
 #### `process_stage_daily`
-`record_id` PK, `stage` CHECK (`CUTTING` \| `PACKING` \| `IRONING`), `product_id` FK, `production_date`, `qty_completed` ≥ 0, `entered_by`, `entered_at`.
-Unique `(stage, product_id, production_date)`. Index `ix_stage_date`.
+`record_id` PK, `stage` CHECK (`CUTTING` \| `STITCHING` \| `IRONING` \| `PACKING`), `product_id` FK, `line_id` FK nullable (cutting lines only), `production_date`, `qty_completed` ≥ 0, `entered_by`, `entered_at`.
+`line_key` is a generated value (`line_id` or 0) so the unique index `ux_stage_daily_line (stage, product_id, production_date, line_key)` allows one cutting row **per cutting line** while non-cutting stages keep one row per product/date. Index `ix_stage_line (line_id)`.
 
 #### `quality_checks`
 `check_id` PK, `customer_id` FK, `production_date`, `pcs_checked` ≥ 0, `pcs_faults` ≥ 0, `entered_by`, `entered_at`.
@@ -344,25 +353,33 @@ Unique `(customer_id, production_date)`. Index `ix_quality_date`.
 
 | View | Grain | Key output |
 |---|---|---|
-| `vw_daily_line_summary` | date × line × product | `total_produced`, `total_defect`, `daily_target`, `pct_of_target` |
+| `vw_daily_line_summary` | date × line × product | `total_produced`, `total_defect`, `daily_target`, `pct_of_target`, `order_no`, `gender`, `line_type` |
 | `vw_daily_factory_total` | date | totals + `active_lines` + `efficiency_pct` (has duplicate `total_assigned_target` / `total_target`) |
-| `vw_weekly_summary` | week_start × line × product | weekly produced/defect/target |
-| `vw_product_progress` | product | produced to date, remaining, `pct_complete` |
+| `vw_weekly_summary` | week_start × line × product | weekly produced/defect/target + `order_no`, `gender`, `line_type` |
+| `vw_product_progress` | product | produced to date, remaining, `pct_complete`, `order_no`, `gender`, `order_date` |
 | `vw_line_efficiency` | date × line | `units_per_worker` (produced ÷ workers_present) |
+| `vw_line_daily_score` | date × line | `total_produced`, `daily_target`, `score` = `LEAST(100, produced ÷ target × 100)` |
 | `vw_branch_daily_summary` | date × branch | target, produced, `difference` |
 | `vw_company_daily_total` | date | line totals **UNION ALL** branch daily totals |
 | `vw_process_stage_summary` | date × stage × product | `qty_completed` + names |
 | `vw_quality_summary` | date × customer | `pcs_ok`, `pass_rate_pct` |
+| `vw_orders` | product | order fields + customer, produced-to-date, remaining, `pct_complete`, active line |
 
-> Views are defined in `ai_studio_code.sql` but **not recreated by migrations**. If you change a view, update the SQL file and re-apply it.
+> Views are defined in `ai_studio_code.sql`; `006_views.sql` also recreates the order/score views for existing databases. If you change a view, update both and re-apply.
 
 ### 6.4 Migrations
 
 | File | Change |
 |---|---|
 | `server/migrations/001_add_workforce_notes.sql` | `ALTER TABLE daily_workforce ADD COLUMN IF NOT EXISTS notes TEXT;` |
+| `002_roles.sql` | Adds `users.assigned_line_id` FK + index and the `LINE_MANAGER` role value. |
+| `003_line_types.sql` | Adds `production_lines.line_type` and seeds `Cutting 1/2/3`. |
+| `004_stage_lines.sql` | Adds `process_stage_daily.line_id` / `line_key` and the per-line unique index. |
+| `005_orders_gender.sql` | Adds `products.gender`, `order_no`, `order_date`, the `order_no_seq` sequence and backfills existing rows. |
+| `006_views.sql` | Recreates reporting views, adding `vw_line_daily_score` and `vw_orders`. |
+| `007_stage_values.sql` | Widens the stage check to include `STITCHING`. |
 
-Migrations are applied manually with `psql -f`. There is no migration runner or tracking table.
+Migrations are applied manually with `psql -f`. There is no migration runner or tracking table, so every migration must be safe to re-run.
 
 ---
 
@@ -378,6 +395,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/production', productionRoutes);
 app.use('/api/customers', customerRoutes);
 app.use('/api/products', productRoutes);
+app.use('/api/orders', orderRoutes);
 app.use('/api/lines', lineRoutes);
 app.use('/api/workforce', workforceRoutes);
 app.use('/api/branches', branchRoutes);
@@ -400,17 +418,18 @@ Logs on connect; exits the process on idle-client errors.
 ### 7.3 Auth
 
 **Login** — [`authController.ts`](server/src/controllers/authController.ts):
-1. Look up user by `username`.
-2. Compare password with bcrypt — **except** a legacy bypass: if `password_hash === 'hashed_pw_here'` and password is `admin123`, allow.
-3. Sign JWT with `{ id, role, name }`, expires in **1 day**, secret `JWT_SECRET` (fallback `super_secret_key_change_this_later`).
+1. Look up user by `username`; inactive accounts are rejected with `403`.
+2. Compare password with bcrypt. There is no dev bypass.
+3. Sign JWT with `{ id, role, name, line_id }`, expires in **1 day**, secret `JWT_SECRET`.
 4. Return `{ token, user: { id, username, name, role, line_id } }`.
 
 **Middleware** — [`middleware/auth.ts`](server/src/middleware/auth.ts):
 - Reads `Authorization: Bearer <token>`.
-- 401 if missing, 403 if invalid.
-- Attaches decoded payload to `req.user`.
+- `401` when the token is missing, malformed, expired, or the user row no longer exists/is inactive.
+- Re-reads the user row and attaches `{ id, username, name, role, line_id }` to `req.user`, so role/line changes take effect immediately.
+- `requireRole('ADMIN')` returns `403` for insufficient role; `isAdmin(user)` is the inline check used for line scoping.
 
-**Usage:** only `GET /api/auth/me` actually uses `authenticateToken`. All other routers are currently public.
+**Guards:** every router is authenticated. Admin routers (`orders`, `products`, `customers`, `branches`, `lines` writes, `stages`, `quality`, `reports`, `users`, `production/daily-report`) require `ADMIN`. Hourly production and workforce entry are open to `ADMIN` and `LINE_MANAGER`, with line managers scoped to their assigned line. `entered_by` / `created_by` always come from the token, never the body.
 
 ### 7.4 Route organization
 
@@ -426,7 +445,7 @@ Validation is manual (check required body fields, return 400). SQL is parameteri
 ## 8. API Reference
 
 Base URL: `http://localhost:5000/api`
-Auth column: ✅ = middleware applied today; ❌ = no middleware (token ignored).
+Auth column: ✅ = `authenticateToken` applied; 🔐 = admin-only (`requireRole('ADMIN')`); 👤 = scoped to the signed-in line manager's own line.
 All responses are JSON with `success` plus `data` or `message`.
 
 ### 8.1 Health & Auth
@@ -435,106 +454,114 @@ All responses are JSON with `success` plus `data` or `message`.
 |---|---|---|---|---|
 | GET | `/test-db` | ❌ | — | `{ success, message, time }` |
 | POST | `/auth/login` | ❌ | `{ username, password }` | `{ success, token, user }` |
-| GET | `/auth/me` | ✅ | — | `{ success, user: { id, role, name } }` |
+| GET | `/auth/me` | ✅ | — | `{ success, user: { id, username, name, role, line_id } }` |
 
 ### 8.2 Production
 
 | Method | Path | Auth | Body / Query | Notes |
 |---|---|---|---|---|
-| POST | `/production/hourly` | ❌ | `assignment_id, line_id, product_id, production_date, hour_number, qty_produced, qty_defect, user_id?` | Upsert on `(line_id, date, hour)` |
-| GET | `/production/hourly` | ❌ | `?date=YYYY-MM-DD` (required) | `log_id, line_id, hour_number, qty_produced, qty_defect` |
-| GET | `/production/daily-report` | ❌ | `?date=` optional | From `vw_company_daily_total`; no date → latest 30 days |
+| POST | `/production/hourly` | ✅ 👤 | `{ production_date*, hour_number*, qty_produced*, qty_defect?, line_id?, assignment_id?, product_id? }` | Admin chooses the line; a line manager's token line/active assignment wins over the body |
+| GET | `/production/hourly` | ✅ 👤 | `?date=YYYY-MM-DD` (required), `line_id?` | Line managers only receive their own line |
+| GET | `/production/daily-report` | 🔐 | `?date=` optional | From `vw_company_daily_total`; no date → latest 30 days |
 
 ### 8.3 Customers
 
-| Method | Path | Body / Query |
-|---|---|---|
-| GET | `/customers` | `?all=true` includes inactive |
-| GET | `/customers/:id` | — |
-| POST | `/customers` | `{ customer_name*, contact_person?, phone?, email?, address? }` |
-| PUT | `/customers/:id` | Any of the above + `is_active` (COALESCE partial update) |
-| DELETE | `/customers/:id` | Soft delete (`is_active = 0`) |
+| Method | Path | Auth | Body / Query |
+|---|---|---|---|
+| GET | `/customers` | 🔐 | `?all=true` includes inactive |
+| GET | `/customers/:id` | 🔐 | — |
+| POST | `/customers` | 🔐 | `{ customer_name*, contact_person?, phone?, email?, address? }` |
+| PUT | `/customers/:id` | 🔐 | Any of the above + `is_active` (COALESCE partial update) |
+| DELETE | `/customers/:id` | 🔐 | Soft delete (`is_active = 0`) |
 
-### 8.4 Products
+### 8.4 Products & Orders
 
-| Method | Path | Body / Query |
-|---|---|---|
-| GET | `/products` | `?customer_id=&status=` |
-| GET | `/products/customer/:customerId` | All products for one customer |
-| GET | `/products/:id` | — |
-| GET | `/products/:id/progress` | From `vw_product_progress` |
-| POST | `/products` | `{ customer_id*, product_name*, order_quantity*, daily_target*, style_code?, color?, size?, status?, start_date?, due_date? }` |
-| PUT | `/products/:id` | Partial update (customer_id is not editable) |
-| DELETE | `/products/:id` | Sets `status = 'CANCELLED'` (no hard delete) |
+| Method | Path | Auth | Body / Query |
+|---|---|---|---|
+| GET | `/products` | 🔐 | `?customer_id=&status=` |
+| GET | `/products/customer/:customerId` | 🔐 | All products for one customer |
+| GET | `/products/:id` | 🔐 | — |
+| GET | `/products/:id/progress` | 🔐 | From `vw_product_progress` |
+| POST | `/products` | 🔐 | `{ customer_id*, product_name*, order_quantity*, daily_target*, order_no?, gender?, style_code?, color?, size?, status?, start_date?, due_date?, order_date? }` |
+| PUT | `/products/:id` | 🔐 | Partial update (customer_id is not editable); accepts `order_no`, `gender`, `order_date` |
+| DELETE | `/products/:id` | 🔐 | Sets `status = 'CANCELLED'` (no hard delete) |
+| GET | `/orders` | 🔐 | `?status=&customer_id=&line_id=&from=&to=&search=&sort=&dir=` — rows from `vw_orders`, whitelisted sorting |
+| GET | `/orders/:id` | 🔐 | One order with customer, progress and active line |
+| POST | `/orders` | 🔐 | Combined order creation, see below |
+
+`POST /orders` runs one transaction and accepts either `customer_id` or an inline `customer { customer_name, contact_person?, phone?, email?, address? }`. It also accepts `order_no?`, `product_name*`, `style_code?`, `color?`, `size?`, `gender?`, `order_quantity*`, `daily_target*`, `status?`, `start_date?`, `due_date?`, `order_date?`, and optional `assign { line_id, daily_target?, start_date? }` to assign straight to a sewing line. The order number is generated from `order_no_seq` when omitted; a duplicate explicit number returns `409`. Sorting keys: `order_no`, `order_date`, `customer`, `product`, `gender`, `quantity`, `target`, `produced`, `pct`, `status`.
 
 ### 8.5 Lines & Assignments
 
-| Method | Path | Body / Query | Notes |
-|---|---|---|---|
-| GET | `/lines` | `?branch_id=&status=` | Joins branch; sorts by numeric part of line name |
-| GET | `/lines/:id` | — | |
-| POST | `/lines` | `{ branch_id*, line_name*, status? }` | |
-| PUT | `/lines/:id` | `{ branch_id?, line_name?, status? }` | |
-| POST | `/lines/:id/assign` | `{ product_id*, daily_target*, start_date*, created_by? }` | Transaction; DB trigger closes previous assignment; sets product PENDING→ACTIVE |
-| GET | `/lines/:id/current` | — | Active assignment + product + customer; 404 if none |
-| GET | `/lines/:id/history` | — | All assignments for the line |
+| Method | Path | Auth | Body / Query | Notes |
+|---|---|---|---|---|
+| GET | `/lines` | ✅ 👤 | `?branch_id=&status=&line_type=&date=` | Includes `line_type`, active order (`order_no`, `gender`, customer), today's produced/target and `score`; line managers see only their line |
+| GET | `/lines/:id` | ✅ 👤 | — | |
+| POST | `/lines` | 🔐 | `{ branch_id*, line_name*, line_type?, status? }` | `line_type` is `SEWING` or `CUTTING` |
+| PUT | `/lines/:id` | 🔐 | `{ branch_id?, line_name?, line_type?, status? }` | |
+| POST | `/lines/:id/assign` | 🔐 | `{ product_id*, daily_target*, start_date* }` | SEWING lines only; transaction; DB trigger closes the previous assignment; sets product PENDING→ACTIVE |
+| GET | `/lines/:id/current` | ✅ 👤 | — | Active assignment + product/customer + order number/gender; 404 if none |
+| GET | `/lines/:id/history` | ✅ 👤 | — | All assignments for the line |
 
 ### 8.6 Workforce
 
-| Method | Path | Body / Query |
-|---|---|---|
-| POST | `/workforce` | `{ line_id*, production_date*, workers_present*, workers_required?, notes?, recorded_by? }` — upsert |
-| GET | `/workforce` | `?line_id=&date=` or `?line_id=&from=&to=` |
+| Method | Path | Auth | Body / Query |
+|---|---|---|---|
+| POST | `/workforce` | ✅ 👤 | `{ production_date*, workers_present*, workers_required?, notes?, line_id? }` — upsert; `recorded_by` and the line come from the token for line managers |
+| GET | `/workforce` | ✅ 👤 | `?line_id=&date=` or `?line_id=&from=&to=`; line managers only receive their own line |
 
 ### 8.7 Branches
 
-| Method | Path | Body / Query | Notes |
-|---|---|---|---|
-| GET | `/branches` | `?all=true` | |
-| GET | `/branches/:id` | — | |
-| POST | `/branches` | `{ branch_name*, is_main? }` | |
-| PUT | `/branches/:id` | `{ branch_name?, is_main?, is_active? }` | |
-| DELETE | `/branches/:id` | — | Soft delete |
-| POST | `/branches/:id/daily` | `{ production_date*, daily_target?, qty_produced?, entered_by? }` | Upsert branch daily |
-| GET | `/branches/:id/daily` | `?date=` or `?from=&to=` | |
-| GET | `/branches/:id/summary` | `?date=` optional | From `vw_branch_daily_summary` |
+| Method | Path | Auth | Body / Query | Notes |
+|---|---|---|---|---|
+| GET | `/branches` | 🔐 | `?all=true` | |
+| GET | `/branches/:id` | 🔐 | — | |
+| POST | `/branches` | 🔐 | `{ branch_name*, is_main? }` | |
+| PUT | `/branches/:id` | 🔐 | `{ branch_name?, is_main?, is_active? }` | |
+| DELETE | `/branches/:id` | 🔐 | — | Soft delete |
+| POST | `/branches/:id/daily` | 🔐 | `{ production_date*, daily_target?, qty_produced? }` | Upsert branch daily; `entered_by` comes from the token |
+| GET | `/branches/:id/daily` | 🔐 | `?date=` or `?from=&to=` | |
+| GET | `/branches/:id/summary` | 🔐 | `?date=` optional | From `vw_branch_daily_summary` |
 
 ### 8.8 Process Stages
 
-| Method | Path | Body / Query |
-|---|---|---|
-| POST | `/stages` | `{ stage*, product_id*, production_date*, qty_completed*, entered_by? }` — `stage` is normalized to uppercase; must be `CUTTING`/`PACKING`/`IRONING`; upsert |
-| GET | `/stages` | `?product_id=&stage=&date=` or `?from=&to=` |
-| GET | `/stages/summary` | `?date=` or `?from=&to=` — from `vw_process_stage_summary` |
+| Method | Path | Auth | Body / Query |
+|---|---|---|---|
+| POST | `/stages` | 🔐 | `{ stage*, product_id*, production_date*, qty_completed*, line_id? }` — `stage` is `CUTTING`/`STITCHING`/`IRONING`/`PACKING`; `line_id` is only allowed for `CUTTING` and must reference a CUTTING line; upsert |
+| GET | `/stages` | 🔐 | `?product_id=&stage=&line_id=&date=` or `?from=&to=` |
+| GET | `/stages/summary` | 🔐 | `?date=` or `?from=&to=` — from `vw_process_stage_summary` |
 
 ### 8.9 Quality
 
-| Method | Path | Body / Query |
-|---|---|---|
-| POST | `/quality` | `{ customer_id*, production_date*, pcs_checked*, pcs_faults?, entered_by? }` — upsert |
-| GET | `/quality` | `?customer_id=&date=` or `?from=&to=` — from `vw_quality_summary` (includes `pcs_ok`, `pass_rate_pct`) |
+| Method | Path | Auth | Body / Query |
+|---|---|---|---|
+| POST | `/quality` | 🔐 | `{ customer_id*, production_date*, pcs_checked*, pcs_faults? }` — upsert |
+| GET | `/quality` | 🔐 | `?customer_id=&date=` or `?from=&to=` — from `vw_quality_summary` (includes `pcs_ok`, `pass_rate_pct`) |
 
 ### 8.10 Reports
 
-| Method | Path | Query | Returns |
-|---|---|---|---|
-| GET | `/reports/daily` | `date` (required) | `{ total, by_line[] }` |
-| GET | `/reports/weekly` | `start`, `end` (required) | Weekly rows joined with line/product/customer |
-| GET | `/reports/customer/:id` | — | Per-product order progress for a customer |
-| GET | `/reports/line/:id` | `from`, `to` (required) | Daily line summary rows |
-| GET | `/reports/efficiency` | `line_id?`, `from?`, `to?` | `vw_line_efficiency` rows |
-| GET | `/reports/company` | `date?` or `from?&to?` | `vw_company_daily_total` rows |
+| Method | Path | Auth | Query | Returns |
+|---|---|---|---|---|
+| GET | `/reports/daily` | 🔐 | `date` (required), `sort?`, `dir?` | `{ total, by_line[] }`; sort keys `order_no`, `customer`, `product`, `gender`, `line`, `produced`, `target`, `pct`, `date` |
+| GET | `/reports/weekly` | 🔐 | `start`, `end` (required), `sort?`, `dir?` | Weekly rows joined with line/product/customer and the same whitelist |
+| GET | `/reports/overview` | 🔐 | `date?` | One payload for the dashboard: `totals`, `by_customer`, `by_order`, `by_branch`, `by_line`, `by_hour`, `stages`, `quality` |
+| GET | `/reports/customer/:id` | 🔐 | — | Per-product order progress for a customer |
+| GET | `/reports/line/:id` | 🔐 | `from`, `to` (required) | Daily line summary rows |
+| GET | `/reports/efficiency` | 🔐 | `line_id?`, `from?`, `to?` | `vw_line_efficiency` rows |
+| GET | `/reports/company` | 🔐 | `date?` or `from?&to?` | `vw_company_daily_total` rows |
+
+Sorting is server-side and uses a fixed whitelist; an unknown `sort` key falls back to the default order.
 
 ### 8.11 Users
 
-| Method | Path | Body / Query | Notes |
-|---|---|---|---|
-| GET | `/users` | `?role=&line_id=&all=true` | Active only by default; never returns `password_hash` |
-| GET | `/users/:id` | — | |
-| POST | `/users` | `{ username*, password*, full_name*, role*, email?, assigned_line_id? }` | `role` must be `ADMIN`/`SUPERVISOR`; bcrypt cost 10; 409 on duplicate username |
-| PUT | `/users/:id` | `{ full_name?, email?, role?, assigned_line_id?, is_active? }` | Profile only |
-| PUT | `/users/:id/password` | `{ password }` | Minimum 8 characters |
-| DELETE | `/users/:id` | — | Soft delete |
+| Method | Path | Auth | Body / Query | Notes |
+|---|---|---|---|---|
+| GET | `/users` | 🔐 | `?role=&line_id=&all=true` | Active only by default; never returns `password_hash` |
+| GET | `/users/:id` | 🔐 | — | |
+| POST | `/users` | 🔐 | `{ username*, password*, full_name*, role*, email?, assigned_line_id? }` | `role` is `ADMIN`/`LINE_MANAGER`/`SUPERVISOR`; line-manager roles require an existing `assigned_line_id`; bcrypt cost 10; 409 on duplicate username |
+| PUT | `/users/:id` | 🔐 | `{ full_name?, email?, role?, assigned_line_id?, is_active? }` | Re-validates that a line manager keeps a line |
+| PUT | `/users/:id/password` | 🔐 | `{ password }` | Minimum 8 characters |
+| DELETE | `/users/:id` | 🔐 | — | Soft delete |
 
 ---
 
@@ -547,48 +574,49 @@ All responses are JSON with `success` plus `data` or `message`.
 
 ### 9.2 Routes
 
-| Path | Component | Layout | Sidebar label |
-|---|---|---|---|
-| `/login` | `pages/auth/Login.tsx` | none | — |
-| `/` | `pages/admin/Dashboard.tsx` | MainLayout | Dashboard |
-| `/entry` | `pages/supervisor/HourlyEntry.tsx` | MainLayout | Hourly Entry |
-| `/lines` | `pages/admin/Lines.tsx` | MainLayout | Production Lines |
-| `/products` | `pages/admin/Products.tsx` | MainLayout | Products |
-| `/customers` | `pages/admin/Customers.tsx` | MainLayout | Customers |
-| `/branches` | `pages/admin/Branches.tsx` | MainLayout | Branches |
-| `/reports` | `pages/admin/Reports.tsx` | MainLayout | Reports |
-| `/users` | `pages/admin/Users.tsx` | MainLayout | Users |
-| `/stages` | `pages/supervisor/ProcessStages.tsx` | MainLayout | Cutting / Packing |
-| `/quality` | `pages/supervisor/Quality.tsx` | MainLayout | Quality Control |
+| Path | Component | Layout | Sidebar label | Access |
+|---|---|---|---|---|
+| `/login` | `pages/auth/Login.tsx` | none | — | public |
+| `/` | `pages/admin/Dashboard.tsx` | MainLayout | Dashboard | admin |
+| `/entry` | `pages/supervisor/HourlyEntry.tsx` | MainLayout | Hourly Entry | admin, line manager (own line) |
+| `/lines` | `pages/admin/Lines.tsx` | MainLayout | Production Lines | admin |
+| `/orders` | `pages/admin/Orders.tsx` | MainLayout | Orders | admin |
+| `/products` | redirect → `/orders` | — | — | admin |
+| `/customers` | `pages/admin/Customers.tsx` | MainLayout | Customers | admin |
+| `/branches` | `pages/admin/Branches.tsx` | MainLayout | Branches | admin |
+| `/reports` | `pages/admin/Reports.tsx` | MainLayout | Reports | admin |
+| `/users` | `pages/admin/Users.tsx` | MainLayout | Users | admin |
+| `/stages` | `pages/supervisor/ProcessStages.tsx` | MainLayout | Daily Production | admin |
+| `/quality` | `pages/supervisor/Quality.tsx` | MainLayout | Quality | admin |
 
-No route guards exist. Unauthenticated users are not redirected, and unknown paths render a blank page (no wildcard/404 route).
+Guards live in `client/src/auth/guards.tsx`: unauthenticated users go to `/login`, line managers are kept out of admin routes, and admins land on `/` while line managers land on `/entry`. The 401 interceptor clears the stored session and redirects to `/login`.
 
 ### 9.3 Layout — `MainLayout.tsx`
 
 - Fixed sidebar (`w-60` expanded / `w-14` collapsed) + sticky top header.
 - Brand: **AmirtexOS** with factory icon.
 - Nav items declared in `allNavItems` with an allowed-role list:
-  - Both roles: Dashboard, Hourly Entry, Cutting/Packing, Quality Control.
-  - `ADMIN` only: Production Lines, Branches, Products, Customers, Reports, Users.
+  - Admin: Dashboard, Orders, Production Lines, Daily Production, Quality, Customers, Branches, Reports, Users.
+  - Line manager (and legacy `SUPERVISOR`): Hourly Entry only, scoped to their own line.
 - Page title map keyed by pathname.
 - Mobile drawer with overlay; desktop collapse toggle.
-- **Current limitation:** `user` is hardcoded to `{ name: 'Dev User', role: 'ADMIN' }`; the `user` value saved at login is not read. Collapse defaults off.
+- Reads the signed-in user from `lib/session.ts`; there is no hardcoded/dev user. Logout clears the session and returns to `/login`.
 
 ### 9.4 Page behavior summary
 
 | Page | What it does | API modules used |
 |---|---|---|
-| **Dashboard** | Date picker; KPI cards (produced, target, efficiency, active lines); bar chart by line; hourly trend line chart; stage bars; quality pie; branch summary table; line table; quality detail table | `reports`, `lines`, `quality`, `stages`, `production`, `branches` |
-| **HourlyEntry** | Loads ACTIVE lines with current assignments; 12-hour grid per line; workforce required/present/notes; Save All upserts each non-zero hour + workforce | `lines`, `production`, `workforce` |
-| **ProcessStages** | Table of ACTIVE products × Cutting/Ironing/Packing; Save posts non-zero quantities | `products`, `stages` |
-| **Quality** | Customer select + checked/faults inputs; live pass-rate gauge; submits daily QC | `customers`, `quality` |
-| **Lines** | Table of lines with current product/target; create/edit line modal; assign-product modal (only PENDING products) | `lines`, `products`, `branches` |
-| **Products** | CRUD table; status badges; cancel action; create/edit modal | `products`, `customers` |
-| **Customers** | Expandable customer rows showing their products; CRUD modal; deactivate | `customers`, `products` |
+| **Dashboard** | Single `GET /reports/overview` request; hero + “Today’s focus”; tabs Customers / Orders / Branches / Lines (urgency-sorted table with score) | `reports` |
+| **HourlyEntry** | Loads lines with current assignments; 12-hour grid per line; workforce required/present/notes; Save All upserts each non-zero hour + workforce | `lines`, `production`, `workforce` |
+| **ProcessStages** | Five tabs — Cutting (active orders × Cutting 1/2/3, saved per line), Stitching (sewing lines + hourly totals, links to `/entry`), Ironing, Packing (per-order daily totals), Quality (embedded `QualityForm`) | `orders`, `lines`, `stages`, `customers`, `quality` |
+| **Quality** | Customer select + checked/faults inputs; live pass-rate gauge; submits daily QC via the shared `QualityForm` | `customers`, `quality` |
+| **Lines** | Sewing and cutting line tables with `line_type`, current order number/gender, produced/target and score; create/edit line modal; assign-order modal shows order number + gender | `lines`, `orders`, `branches` |
+| **Orders** | Order table (order #, gender, qty, target, progress, status); combined New Order modal (existing customer or inline new customer) and edit/cancel | `orders`, `customers`, `products` |
+| **Customers** | Account CRUD; expandable read-only order history | `customers`, `orders` |
 | **Branches** | Date picker; per-branch daily target/produced entry + save; summary table | `branches` |
-| **Reports** | Tabs: Daily / Weekly / All Companies; tables with CSV export | `reports` |
-| **Users** | User table with role/line; create/edit; password reset via edit; deactivate | `users`, `lines` |
-| **Login** | Username/password form; stores `token` + `user`; dev fallback on error | `auth` |
+| **Reports** | Tabs: Daily / Weekly / All Companies / Orders; Order + Gender columns; sortable headers via the server whitelist; CSV export | `reports`, `orders` |
+| **Users** | User table with role/line; create/edit; password reset via edit; deactivate; line managers must have a line | `users`, `lines` |
+| **Login** | Username/password form; real errors; stores token + user; validates the session with `getMe`; role-based landing | `auth` |
 
 ### 9.5 API client modules (`client/src/api/`)
 
@@ -597,11 +625,12 @@ No route guards exist. Unauthenticated users are not redirected, and unknown pat
 | `auth.ts` | `login`, `getMe` |
 | `branches.ts` | `getBranches`, `getBranchSummary`, `upsertBranchDaily` |
 | `customers.ts` | `getCustomers`, `getCustomer`, `createCustomer`, `updateCustomer`, `deleteCustomer` |
+| `orders.ts` | `getOrders`, `getOrder`, `createOrder` |
 | `lines.ts` | `getLines`, `getLine`, `getLineCurrent`, `assignProduct`, `createLine`, `updateLine` |
 | `production.ts` | `logHourlyProduction`, `getHourlyProduction` |
 | `products.ts` | `getProducts`, `getProduct`, `getProductsByCustomer`, `createProduct`, `updateProduct`, `deleteProduct` |
 | `quality.ts` | `postQuality`, `getQuality` |
-| `reports.ts` | `getDailyReport`, `getWeeklyReport`, `getCustomerReport`, `getLineReport`, `getEfficiencyReport`, `getCompanyReport` |
+| `reports.ts` | `getDailyReport`, `getWeeklyReport`, `getOverviewReport`, `getCustomerReport`, `getLineReport`, `getEfficiencyReport`, `getCompanyReport` |
 | `stages.ts` | `postStage`, `getStages`, `getStagesSummary` |
 | `users.ts` | `getUsers`, `createUser`, `updateUser`, `resetPassword`, `deleteUser` |
 | `workforce.ts` | `saveWorkforce`, `getWorkforce` |
@@ -617,7 +646,7 @@ axios.create({
 });
 ```
 Request interceptor adds `Authorization: Bearer <localStorage.token>`.
-Response interceptor currently only re-rejects errors (no 401 redirect/cleanup).
+Response interceptor clears the stored token/user and redirects to `/login` on `401`; `403` is surfaced as an error without destroying a valid session.
 
 ### 9.7 Key components
 
@@ -628,7 +657,8 @@ Response interceptor currently only re-rejects errors (no 401 redirect/cleanup).
   - Cell background: green ≥100% of hourly target, amber ≥70%, red below.
   - Keyboard navigation: arrows + Enter move between hour cells; worker-required Enter jumps to Hr 1.
   - Running total banner with % and “needs N/hr to meet target”.
-- **`ReportTable.tsx`** — card + sticky-header table + CSV export; right-aligns numeric columns detected from data.
+- **`ReportTable.tsx`** — card + sticky-header table + CSV export; right-aligns numeric columns detected from data. Columns can opt into sorting with `sortKey`; the page owns the sort state and the server whitelist decides the SQL order.
+- **`QualityForm.tsx`** — shared quality tally form used by both `/quality` and the Daily Production → Quality tab.
 - **`ProductionBar.tsx`** — horizontal progress bar; `getStatusColor()` implements the 100/70 status rules; overflow chevron.
 - **`StatusBadge.tsx`** — `Badge` wrapper for percentage status.
 - **`ui/`** — Button, Input, Select, Textarea, Badge, Card, Modal, Spinner, Skeleton (+ table/card variants), Toast provider.
@@ -710,7 +740,9 @@ For the rationale behind these choices and the per-page recipes, see
 ### 11.1 Line assignment
 
 ```
-Admin opens /lines → Assign Product (lists PENDING products)
+Admin opens /lines → Assign Order on a SEWING line
+  → GET /orders (non-cancelled orders)
+  → modal shows order number, gender, customer and quantity
   → POST /lines/:id/assign { product_id, daily_target, start_date }
     → BEGIN
       → INSERT line_assignments
@@ -718,13 +750,13 @@ Admin opens /lines → Assign Product (lists PENDING products)
       → UPDATE products SET status='ACTIVE' WHERE status='PENDING'
     → COMMIT
 ```
-One active assignment per line is additionally enforced by partial unique index.
+One active assignment per line is additionally enforced by partial unique index. Cutting lines never take assignments; they record stage output instead.
 
 ### 11.2 Hourly production entry
 
 ```
-Supervisor opens /entry (date defaults today)
-  → GET /lines (filter ACTIVE) → GET /lines/:id/current for each
+Admin/line manager opens /entry (date defaults today)
+  → GET /lines (line managers receive only their own line)
   → GET /production/hourly?date=... and GET /workforce?date=...
   → edits 12 hour cells + workforce fields
   → Save All:
@@ -732,15 +764,22 @@ Supervisor opens /entry (date defaults today)
       for each hour with produced>0 or defect>0 → POST /production/hourly (upsert)
   → toast "All data saved successfully"
 ```
-Only ACTIVE lines that have a current assignment appear.
+A line manager's write payload cannot target another line: the server uses the token's `line_id` and that line's active assignment.
 
-### 11.3 Process stages
+### 11.3 Daily production (process stages)
 
-`/stages` lists `GET /products?status=ACTIVE`. Save posts one request per product/stage where qty > 0 to `POST /stages`, which upserts on `(stage, product_id, date)`.
+`/stages` has five tabs:
+
+- **Cutting** — rows are active orders, columns are the configured cutting lines (Cutting 1/2/3). Each cell saves `POST /stages { stage:'CUTTING', product_id, line_id, production_date, qty_completed }`, so lines are independent.
+- **Stitching** — reads sewing lines and their hourly totals from `GET /lines?date=`; shows produced/target/score and links to `/entry` for hourly input.
+- **Ironing** and **Packing** — one daily total per active order (`POST /stages` with no `line_id`).
+- **Quality** — embeds the same `QualityForm` used by `/quality`.
+
+Cutting upserts on `(stage, product_id, date, line_key)`; other stages upsert on the product/date key with `line_key = 0`.
 
 ### 11.4 Quality control
 
-`/quality` selects a customer, enters checked/faults, computes pass rate client-side, posts `POST /quality`. Reads come from `vw_quality_summary`, so pass rate/OK counts are precomputed.
+`/quality` and the Daily Production → Quality tab use `QualityForm`: pick a customer, enter checked/faults, see the live pass rate, and post `POST /quality`. Reads come from `vw_quality_summary`, so pass rate/OK counts are precomputed.
 
 ### 11.5 Branch daily production
 
@@ -748,10 +787,29 @@ Only ACTIVE lines that have a current assignment appear.
 
 ### 11.6 Reporting
 
-- **Daily** — factory total + per-line/product breakdown.
-- **Weekly** — `vw_weekly_summary` filtered by `week_start` between start/end, enriched with line/product/customer names.
-- **Company** — `vw_company_daily_total`, which combines line-level and branch-level production.
+- **Dashboard** — a single `GET /reports/overview?date=` returns totals, hourly output, customers, orders, branches, lines and quality. Tabs switch client-side; there is no per-line/per-branch fan-out.
+- **Daily** — factory total + per-line/product breakdown, with Order # and Gender columns.
+- **Weekly** — `vw_weekly_summary` filtered by `week_start`, enriched with line/product/customer/order/gender.
+- **All Companies** — `vw_company_daily_total`.
+- **Orders** — order list sorted by order number by default.
+- Sortable headers send `sort` + `dir`; the server validates them against a whitelist. The chosen sort is kept when the date changes.
 - CSV export is client-side in `ReportTable`.
+
+### 11.7 Creating an order (customer + order in one submit)
+
+```
+Admin opens /orders → New Order
+  → choose Existing customer or New customer (inline name/contact/phone/email)
+  → enter order number (optional), product/style, gender, quantity, daily target, dates
+  → POST /orders
+      → BEGIN
+        → INSERT customer when inline details were supplied
+        → INSERT product with order_no (sequence default) + gender + order_date
+        → optional INSERT line_assignment when assign.line_id is sent
+      → COMMIT
+  → returns the joined order row, created customer and assignment
+```
+`/customers` is account management only; its expandable order history is read-only and links staff to `/orders` for changes.
 
 ---
 
@@ -767,6 +825,7 @@ Node ≥ 18, npm ≥ 9, PostgreSQL ≥ 14.
 psql -U postgres -c "CREATE DATABASE textile_db;"
 psql -U postgres -d textile_db -f ai_studio_code.sql
 psql -U postgres -d textile_db -f server/migrations/001_add_workforce_notes.sql
+# … then 002 through 007 in filename order. Re-running is safe.
 ```
 
 ### Server
@@ -841,25 +900,23 @@ Alternative: set `VITE_API_BASE_URL=/api` to use the Vite proxy (recommended if 
 - Rationale and page recipes: [`FRONTEND_DESIGN_GUIDE.md`](FRONTEND_DESIGN_GUIDE.md).
 
 ### Enforce authentication
-Wrap routers with `authenticateToken` in `server/src/index.ts`, e.g.:
+Every router already applies `authenticateToken`; admin-only routers add `requireRole('ADMIN')`. For a new router, follow that pattern:
 ```ts
-app.use('/api/production', authenticateToken, productionRoutes);
+router.use(authenticateToken, requireRole('ADMIN'));
 ```
-Then update the client to redirect on 401 in `lib/client.ts`.
+Line-scoped routers should compare `req.user.line_id` instead of trusting a body/query `line_id`, and write `entered_by`/`created_by` from `req.user.id`.
 
 ---
 
 ## 14. Known Issues & Gotchas
 
 ### Security / auth
-1. **API is effectively public.** `authenticateToken` is applied only to `GET /api/auth/me`. All CRUD, reports, and writes accept unauthenticated requests.
-2. **Login dev fallback.** In `Login.tsx`, any failed login catches the error and signs in as a hardcoded `Dev User` / `ADMIN`. This bypasses the backend entirely from the UI's perspective.
-3. **Legacy password bypass.** `authController.ts` accepts `admin123` whenever the stored hash equals the literal `hashed_pw_here`.
-4. **JWT secret fallback** is hardcoded (`super_secret_key_change_this_later`) if `JWT_SECRET` is unset.
-5. **Role UI is hardcoded.** `MainLayout` ignores the stored user and always shows ADMIN navigation.
-6. **No route guards / no logout.** `/` is reachable without a token; there is no sign-out control.
-7. **`entered_by` / `created_by` / `recorded_by` are taken from request bodies**, not from the verified token (TODO comments acknowledge this in several routes).
-8. **Password policy inconsistency:** user creation allows any length; reset requires ≥ 8; seed password `admin123` is 6.
+1. **Tokens live in `localStorage`**, so any XSS can read them; there is no refresh-token rotation.
+2. **JWT secret fallback** is hardcoded if `JWT_SECRET` is unset — always set it in production.
+3. **No rate limiting** on `/auth/login` or the API.
+4. **Legacy `SUPERVISOR` role** is still accepted for hourly entry while accounts migrate to `LINE_MANAGER`.
+5. **Password policy inconsistency:** user creation allows any length; reset requires ≥ 8; seed password `admin123` is 6.
+6. **`GET /api/test-db` is public** (health check only, but it reveals connectivity).
 
 ### CORS / networking
 9. **No CORS middleware.** Commit `69cc0a3` says "disable cors and login". With `VITE_API_BASE_URL=http://localhost:5000/api`, the browser makes cross-origin calls and may be blocked. Use the Vite proxy (`VITE_API_BASE_URL=/api`) or serve client and API from one origin.
@@ -874,7 +931,7 @@ Then update the client to redirect on 401 in `lib/client.ts`.
 16. **Duplicate columns in `vw_daily_factory_total`** (`total_assigned_target` and `total_target`).
 17. **Weekly report boundary:** client sends `selectedDate - 7 days` to `selectedDate` and the query compares `week_start` (Monday) to those dates; the current partial week can be excluded.
 18. **Reports “All Companies” tab** actually shows the company daily total, not per-company data.
-19. **Dashboard makes N+1 calls** — one `getLineCurrent` per line and one `getBranchSummary` per branch on each load.
+19. **Daily report totals can be empty while rows exist** — the total comes from `vw_daily_factory_total` (branch-level), while rows come from `vw_daily_line_summary` (hourly).
 20. **Silent error swallowing** — many pages use `.catch(() => {})` or log-only catches, so failures often surface as empty tables.
 21. **No loading/empty error distinction** in several tables (empty data and failed request look the same).
 
@@ -895,9 +952,9 @@ Then update the client to redirect on 401 in `lib/client.ts`.
 
 | File | Lines | Purpose |
 |---|---|---|
-| `ai_studio_code.sql` | 286 | Full schema: 12 tables, indexes, assignment trigger, 9 views |
+| `ai_studio_code.sql` | 398 | Full schema: 12 tables, indexes, assignment trigger, 11 views |
 | `SETUP.md` | 333 | Install/run guide, API overview, troubleshooting |
-| `FRONTEND_DESIGN_GUIDE.md` | 136 | Design philosophy and page recipes; points to `design.ts` for all values |
+| `FRONTEND_DESIGN_GUIDE.md` | 207 | Design philosophy and page recipes; points to `design.ts` for all values |
 | `SYSTEM_DOCUMENTATION.md` | — | This document |
 | `todo.md` | 95 | Build checklist (all phases marked complete) |
 | `Untitled spreadsheet(1).xlsx` | — | Local scratch spreadsheet (gitignored) |
@@ -911,23 +968,30 @@ Then update the client to redirect on 401 in `lib/client.ts`.
 | `server/tsconfig.json` | 13 | Strict CommonJS build `src → dist` |
 | `server/.env` | — | Local env (PORT, PG_*, JWT_SECRET) |
 | `server/migrations/001_add_workforce_notes.sql` | 2 | Adds `daily_workforce.notes` |
-| `server/src/index.ts` | 46 | Express entry, `/api/test-db`, route mounts |
-| `server/src/seed.ts` | 68 | Seeds admin, branches, 3 lines, demo customer/product |
+| `server/migrations/002_roles.sql` | 16 | Adds `users.assigned_line_id` + index and `LINE_MANAGER` |
+| `server/migrations/003_line_types.sql` | 20 | Adds `production_lines.line_type` and seeds Cutting 1/2/3 |
+| `server/migrations/004_stage_lines.sql` | 21 | Adds cutting-line columns and per-line uniqueness |
+| `server/migrations/005_orders_gender.sql` | 49 | Adds order number/date/gender to products |
+| `server/migrations/006_views.sql` | 120 | Recreates reporting views and adds score/order views |
+| `server/migrations/007_stage_values.sql` | 9 | Adds `STITCHING` to the stage check |
+| `server/src/index.ts` | 48 | Express entry, `/api/test-db`, route mounts |
+| `server/src/seed.ts` | 115 | Seeds admin, branches, 3 lines, demo customer/product |
 | `server/src/config/db.ts` | 28 | `pg.Pool` + `query()` helper |
-| `server/src/middleware/auth.ts` | 21 | JWT Bearer verification |
+| `server/src/middleware/auth.ts` | 87 | JWT Bearer verification, role/line guards |
 | `server/src/controllers/authController.ts` | 58 | Login: lookup, bcrypt, JWT |
 | `server/src/controllers/productionController.ts` | 77 | Hourly upsert, hourly fetch, daily report |
 | `server/src/routes/auth.ts` | 14 | `POST /login`, `GET /me` |
 | `server/src/routes/production.ts` | 15 | Hourly + daily-report routes |
 | `server/src/routes/customers.ts` | 104 | Customer CRUD + soft delete |
-| `server/src/routes/products.ts` | 167 | Product CRUD, by-customer, progress, cancel |
-| `server/src/routes/lines.ts` | 187 | Line CRUD, assign, current, history |
+| `server/src/routes/products.ts` | 180 | Product CRUD, by-customer, progress, cancel; order fields |
+| `server/src/routes/orders.ts` | 263 | Combined order creation, list/get, whitelisted sorting |
+| `server/src/routes/lines.ts` | 282 | Line CRUD, assign, current/history, type filter + score |
 | `server/src/routes/workforce.ts` | 76 | Workforce upsert + query |
 | `server/src/routes/branches.ts` | 185 | Branch CRUD, daily production, summary |
-| `server/src/routes/stages.ts` | 120 | Cutting/Packing/Ironing upsert, list, summary |
-| `server/src/routes/quality.ts` | 72 | Quality upsert + view query |
-| `server/src/routes/reports.ts` | 165 | Daily, weekly, customer, line, efficiency, company |
-| `server/src/routes/users.ts` | 160 | User CRUD, password reset, soft delete |
+| `server/src/routes/stages.ts` | 161 | Stage upsert/list/summary; cutting `line_id` |
+| `server/src/routes/quality.ts` | 76 | Quality upsert + view query |
+| `server/src/routes/reports.ts` | 356 | Daily, weekly, overview, customer, line, efficiency, company + sort whitelist |
+| `server/src/routes/users.ts` | 190 | User CRUD, password reset, line-manager validation, soft delete |
 
 ### Client
 
@@ -939,15 +1003,19 @@ Then update the client to redirect on 401 in `lib/client.ts`.
 | `client/.env.example` | 1 | `VITE_API_BASE_URL` |
 | `client/tsconfig.json` / `tsconfig.app.json` / `tsconfig.node.json` | — | TS project configs |
 | `client/src/main.tsx` | 10 | React root |
-| `client/src/App.tsx` | 40 | Router + all routes + ToastProvider |
+| `client/src/App.tsx` | 56 | Router, guards, routes, `/products` redirect, ToastProvider |
+| `client/src/domain.ts` | 75 | Shared roles, genders, line types, stage tabs and labels |
 | `client/src/design.ts` | 464 | ← Single source of truth: palette, type, thresholds, tones, chart, component presets, generated CSS |
 | `client/src/index.css` | 7 | Intentionally empty stub; replaced at build time by `design.ts` |
-| `client/src/lib/client.ts` | 26 | Axios instance + token interceptor |
-| `client/src/layouts/MainLayout.tsx` | 235 | Sidebar, nav/roles, header, mobile drawer |
+| `client/src/lib/client.ts` | 36 | Axios instance, token interceptor, 401 session cleanup |
+| `client/src/lib/session.ts` | 30 | Read/write/clear the stored session |
+| `client/src/auth/guards.tsx` | 40 | `RequireAuth` / `RequireAdmin` route guards |
+| `client/src/layouts/MainLayout.tsx` | 249 | Sidebar, role nav, header, mobile drawer, logout |
 | `client/src/api/auth.ts` | 28 | `login`, `getMe` |
 | `client/src/api/branches.ts` | 17 | Branch reads + daily upsert |
 | `client/src/api/customers.ts` | 26 | Customer CRUD |
-| `client/src/api/lines.ts` | 31 | Lines, current, assign, create/update |
+| `client/src/api/orders.ts` | 60 | Orders list/get/create |
+| `client/src/api/lines.ts` | 35 | Lines, current, assign, create/update |
 | `client/src/api/production.ts` | 19 | Hourly save/fetch |
 | `client/src/api/products.ts` | 42 | Product CRUD + by-customer |
 | `client/src/api/quality.ts` | 16 | Quality save/fetch |
@@ -956,7 +1024,8 @@ Then update the client to redirect on 401 in `lib/client.ts`.
 | `client/src/api/users.ts` | 33 | User CRUD + password reset |
 | `client/src/api/workforce.ts` | 17 | Workforce save/fetch |
 | `client/src/components/HourlyGrid.tsx` | 244 | 12-hour grid, tabs, keyboard nav, totals |
-| `client/src/components/ReportTable.tsx` | 82 | Table + CSV export |
+| `client/src/components/QualityForm.tsx` | 103 | Shared quality tally form |
+| `client/src/components/ReportTable.tsx` | 126 | Table + CSV export + sortable headers |
 | `client/src/components/production/ProductionBar.tsx` | 58 | Progress bar + status color util |
 | `client/src/components/production/StatusBadge.tsx` | 23 | Percentage badge |
 | `client/src/components/ui/index.ts` | 9 | Barrel export |
@@ -970,17 +1039,17 @@ Then update the client to redirect on 401 in `lib/client.ts`.
 | `client/src/components/ui/Spinner.tsx` | 27 | SVG spinner |
 | `client/src/components/ui/Skeleton.tsx` | 50 | Text/circle/rect + table/card presets |
 | `client/src/components/ui/Toast.tsx` | 75 | Toast context/provider, 4 types, 4s auto-dismiss |
-| `client/src/pages/auth/Login.tsx` | 124 | Brand panel + login form + dev fallback |
-| `client/src/pages/admin/Dashboard.tsx` | 630 | KPIs, 4 charts, branch/line/quality tables |
-| `client/src/pages/admin/Lines.tsx` | 161 | Line table, create/edit, assign modal |
-| `client/src/pages/admin/Products.tsx` | 177 | Product table + form modal + cancel |
-| `client/src/pages/admin/Customers.tsx` | 184 | Expandable customers + product subtable + CRUD |
-| `client/src/pages/admin/Branches.tsx` | 141 | Branch daily entry + summary table |
-| `client/src/pages/admin/Reports.tsx` | 152 | Daily/Weekly/Company tabs |
-| `client/src/pages/admin/Users.tsx` | 141 | User table + create/edit/reset/deactivate |
+| `client/src/pages/auth/Login.tsx` | 140 | Brand panel + login form + role landing |
+| `client/src/pages/admin/Dashboard.tsx` | 715 | Overview hero + tabs: Customers/Orders/Branches/Lines |
+| `client/src/pages/admin/Lines.tsx` | 295 | Sewing/cutting tables, create/edit, assign modal with score |
+| `client/src/pages/admin/Orders.tsx` | 439 | Order table + combined customer/order modal |
+| `client/src/pages/admin/Customers.tsx` | 201 | Account CRUD + read-only order history |
+| `client/src/pages/admin/Branches.tsx` | 142 | Branch daily entry + summary table |
+| `client/src/pages/admin/Reports.tsx` | 223 | Daily/Weekly/Company/Orders tabs + sorting |
+| `client/src/pages/admin/Users.tsx` | 157 | User table + create/edit/reset/deactivate |
 | `client/src/pages/supervisor/HourlyEntry.tsx` | 177 | Loads lines/workforce, saves all entries |
-| `client/src/pages/supervisor/ProcessStages.tsx` | 111 | Product × stage entry table |
-| `client/src/pages/supervisor/Quality.tsx` | 106 | QC form + live pass-rate gauge |
+| `client/src/pages/supervisor/ProcessStages.tsx` | 406 | Five-tab daily production entry |
+| `client/src/pages/supervisor/Quality.tsx` | 30 | QC page wrapping `QualityForm` |
 | `client/public/favicon.svg`, `client/public/icons.svg` | — | Static assets |
 
 ---

@@ -115,35 +115,50 @@ export default function Customers() {
                     </td>
                   </tr>
                   {expandedId === customer.customer_id && (
-                    <tr key={`${customer.customer_id}-products`}>
+                    <tr key={`${customer.customer_id}-orders`}>
                       <td colSpan={5} className="px-5 py-4 bg-canvas/50">
                         <div className="bg-surface-raised rounded-lg border border-rule p-4">
-                          <h4 className="font-semibold text-ink text-sm mb-3">Products</h4>
-                          {!productsMap[customer.customer_id] ? (
+                          <div className="mb-3 flex items-center justify-between">
+                            <h4 className="font-semibold text-ink text-sm">Order history</h4>
+                            <span className="text-[11px] text-muted">Read-only · manage orders on the Orders page</span>
+                          </div>
+                          {!ordersMap[customer.customer_id] ? (
                             <p className="text-sm text-muted">Loading...</p>
-                          ) : productsMap[customer.customer_id].length === 0 ? (
-                            <p className="text-sm text-muted">No products for this customer.</p>
+                          ) : ordersMap[customer.customer_id].length === 0 ? (
+                            <p className="text-sm text-muted">No orders for this customer.</p>
                           ) : (
                             <table className="w-full text-sm">
                               <thead>
                                 <tr className="text-[10px] text-muted uppercase tracking-[0.14em] border-b border-rule">
-                                  <th className="text-left pb-2 pr-4 font-medium">Product Name</th>
-                                  <th className="text-left pb-2 pr-4 font-medium">Style Code</th>
-                                  <th className="text-right pb-2 pr-4 font-medium">Order Quantity</th>
+                                  <th className="text-left pb-2 pr-4 font-medium">Order #</th>
+                                  <th className="text-left pb-2 pr-4 font-medium">Product</th>
+                                  <th className="text-left pb-2 pr-4 font-medium">Gender</th>
+                                  <th className="text-right pb-2 pr-4 font-medium">Quantity</th>
                                   <th className="text-right pb-2 pr-4 font-medium">Daily Target</th>
+                                  <th className="text-right pb-2 pr-4 font-medium">Produced</th>
                                   <th className="text-center pb-2 font-medium">Status</th>
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-rule text-ink-soft">
-                                {productsMap[customer.customer_id].map((prod: any) => (
-                                  <tr key={prod.product_id}>
-                                    <td className="py-2 pr-4 text-ink font-medium">{prod.product_name}</td>
-                                    <td className="py-2 pr-4">{prod.style_code}</td>
-                                    <td className="py-2 pr-4 text-right">{prod.order_quantity?.toLocaleString()}</td>
-                                    <td className="py-2 pr-4 text-right">{prod.daily_target}</td>
+                                {ordersMap[customer.customer_id].map((order: any) => (
+                                  <tr key={order.product_id}>
+                                    <td className="py-2 pr-4 font-mono text-xs text-ink">{order.order_no}</td>
+                                    <td className="py-2 pr-4 text-ink font-medium">{order.product_name}</td>
+                                    <td className="py-2 pr-4">
+                                      {GENDER_LABELS[order.gender as keyof typeof GENDER_LABELS] ?? order.gender ?? '—'}
+                                    </td>
+                                    <td className="py-2 pr-4 text-right font-mono tabular-nums">
+                                      {Number(order.order_quantity).toLocaleString()}
+                                    </td>
+                                    <td className="py-2 pr-4 text-right font-mono tabular-nums">
+                                      {Number(order.daily_target).toLocaleString()}
+                                    </td>
+                                    <td className="py-2 pr-4 text-right font-mono tabular-nums">
+                                      {Number(order.produced_to_date).toLocaleString()}
+                                    </td>
                                     <td className="py-2 text-center">
-                                      <Badge status={prod.status === 'ACTIVE' ? 'on_target' : prod.status === 'COMPLETED' ? 'on_target' : prod.status === 'CANCELLED' ? 'critical' : 'warning'} size="sm">
-                                        {prod.status}
+                                      <Badge status={order.status === 'ACTIVE' ? 'on_target' : order.status === 'COMPLETED' ? 'on_target' : order.status === 'CANCELLED' ? 'critical' : 'warning'} size="sm">
+                                        {order.status}
                                       </Badge>
                                     </td>
                                   </tr>

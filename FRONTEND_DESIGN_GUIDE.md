@@ -15,9 +15,9 @@ better-informed decision?* Decoration that carries no information is removed.
 
 Two modes of use share one system:
 
-- **Admin** — desktop, analytical, whole-factory view: customers, products,
+- **Admin** — desktop, analytical, whole-factory view: customers, orders,
   assignments, reports.
-- **Supervisor** — tablet on the floor, in motion, gloved hands: touch-first,
+- **Line manager** — tablet on the floor, in motion, gloved hands: touch-first,
   large targets, one task per screen, immediate feedback.
 
 ### Principles
@@ -121,6 +121,10 @@ There are exactly three operational states plus two neutral ones:
 Quality uses its own two cut-offs via `qualityTone`. The numbers behind every
 state are in `thresholds`; never restate them in a page.
 
+A line **score** is attainment capped at 100 (`produced ÷ target × 100`). Render
+it as a percentage next to the line; leave it blank rather than showing 0 when
+there is no target.
+
 Each tone exposes `label`, `text`, `dot`, `fill`, `soft` and `border`, so the same
 state renders consistently as text, a dot, a bar fill, a soft panel, or a border.
 
@@ -149,9 +153,25 @@ state renders consistently as text, a dot, a bar fill, a soft panel, or a border
 
 ### Dashboard
 Problem-stating serif headline → dark hero with the largest number and the
-hourly chart → “Today’s focus” panel → quiet stat row → shift runway → urgency-
-sorted line table → plain branch / quality / stage lists. Filters are pills; the
-table is sorted by need, not by line number.
+hourly chart → “Today’s focus” panel → quiet stat row → shift runway → four tabs
+(Customers, Orders, Branches, Lines). One overview request feeds every tab; the
+line table is sorted by urgency (need first, line number last) and shows each
+line’s score. Filters are pills.
+
+### Orders
+The order list is the admin’s home for customer work: order number, product,
+customer, gender, quantity, daily target, progress and status in one table. The
+primary action opens a **combined** modal — pick an existing customer or type a
+new one inline, then enter the order details in the same submit. Editing reuses
+the same form; cancelling is a ghost action in the risk colour. Customers are
+accounts only, so their order history is read-only and points back here.
+
+### Daily production
+Five tabs, one per stage: Cutting, Stitching, Ironing, Packing, Quality. Cutting
+is a grid of active orders × cutting lines (Cutting 1/2/3) so each line saves
+independently. Stitching summarises sewing lines with produced/target/score and
+links to hourly entry. Ironing and Packing are one daily total per order. Quality
+embeds the same form as `/quality`, so the pass-rate gauge behaves identically.
 
 ### Hourly entry
 Line tabs, then a single horizontally scrollable grid: sticky line/customer/style
@@ -163,9 +183,17 @@ how many units per hour are still needed.
 Header with one primary action, then a single table in a card. Deactivation is a
 ghost action in the risk colour. Empty and loading states are distinct.
 
+### Reports
+Tabs for Daily, Weekly, All Companies and Orders. Order and Gender are always
+visible columns. A column header that can be sorted looks and behaves like a
+button and shows the current direction; sorting is server-side, so the page only
+sends the whitelisted key and direction. Sort state belongs to the tab and
+survives date changes. CSV export stays available on every tab.
+
 ### Login
 Split screen: a dark brand panel stating what the system does, and a quiet form
-card. No marketing illustration.
+card. No marketing illustration. Failed logins show the server’s message; the
+role decides the landing page (`/` for admins, `/entry` for line managers).
 
 ---
 

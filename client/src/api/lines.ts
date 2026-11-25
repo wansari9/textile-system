@@ -1,6 +1,6 @@
 import apiClient from '../lib/client';
 
-export const getLines = async (params?: { branch_id?: number; status?: string; line_type?: string }) => {
+export const getLines = async (params?: { branch_id?: number; status?: string; line_type?: string; date?: string }) => {
   const { data } = await apiClient.get('/lines', { params });
   return data;
 };

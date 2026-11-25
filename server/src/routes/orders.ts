@@ -18,6 +18,30 @@ const ORDER_COLUMNS = `product_id, order_no, to_char(order_date, 'YYYY-MM-DD') A
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
+// Sort whitelist for the orders list (used by the Reports → Orders tab).
+// Values are SQL fragments; the client can never inject SQL via ?sort=.
+const ORDER_SORTABLE: Record<string, string> = {
+  order_no: 'order_no',
+  order_date: 'order_date',
+  customer: 'customer_name',
+  product: 'product_name',
+  gender: 'gender',
+  quantity: 'order_quantity',
+  target: 'daily_target',
+  produced: 'produced_to_date',
+  pct: 'pct_complete',
+  status: 'status',
+};
+
+const orderByFor = (sort: unknown, dir: unknown): string => {
+  const key = typeof sort === 'string' ? sort : '';
+  const fallback = 'order_date DESC NULLS LAST, order_no DESC';
+  const column = ORDER_SORTABLE[key];
+  if (!column) return fallback;
+  const direction = String(dir).toLowerCase() === 'desc' ? 'DESC' : 'ASC';
+  return `${column} ${direction}, ${fallback}`;
+};
+
 // Thrown inside a transaction so the catch block can roll back and answer
 // with a proper status code instead of a generic 500.
 const httpError = (status: number, message: string) => {
@@ -29,7 +53,7 @@ const httpError = (status: number, message: string) => {
 // GET /api/orders  (?status=&customer_id=&line_id=&from=&to=&search=)
 // Orders are products; this exposes them with customer, progress and line.
 router.get('/', async (req: Request, res: Response) => {
-  const { status, customer_id, line_id, from, to, search } = req.query;
+  const { status, customer_id, line_id, from, to, search, sort, dir } = req.query;
   try {
     const conditions: string[] = [];
     const params: any[] = [];
@@ -70,7 +94,7 @@ router.get('/', async (req: Request, res: Response) => {
 
     const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
     const result = await pool.query(
-      `SELECT ${ORDER_COLUMNS} FROM vw_orders ${whereClause} ORDER BY order_date DESC NULLS LAST, order_no DESC`,
+      `SELECT ${ORDER_COLUMNS} FROM vw_orders ${whereClause} ORDER BY ${orderByFor(sort, dir)}`,
       params
     );
     res.json({ success: true, data: result.rows });

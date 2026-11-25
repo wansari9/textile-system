@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { isAxiosError } from 'axios';
 import { getUsers, createUser, updateUser, resetPassword, deleteUser } from '../../api/users';
 import { getLines } from '../../api/lines';
 import { Button, Card, Input, Select, Badge, Modal } from '../../components/ui';
@@ -44,25 +45,38 @@ export default function Users() {
   };
 
   const handleSave = async () => {
-    if (editing) {
-      const payload: any = { full_name: form.full_name, email: form.email, role: form.role };
-      if (form.assigned_line_id) payload.assigned_line_id = Number(form.assigned_line_id);
-      await updateUser(editing.user_id, payload);
-      if (form.password) await resetPassword(editing.user_id, form.password);
-      toast('success', 'User updated');
-    } else {
-      await createUser({
-        username: form.username,
-        password: form.password,
-        full_name: form.full_name,
-        email: form.email || undefined,
-        role: form.role,
-        assigned_line_id: form.assigned_line_id ? Number(form.assigned_line_id) : undefined,
-      });
-      toast('success', 'User created');
+    const needsLine = form.role === 'LINE_MANAGER' || form.role === 'SUPERVISOR';
+    if (needsLine && !form.assigned_line_id) {
+      toast('error', 'Assign a production line to this line manager');
+      return;
     }
-    setShowForm(false);
-    fetchUsers();
+
+    try {
+      if (editing) {
+        const payload: any = { full_name: form.full_name, email: form.email, role: form.role };
+        if (form.assigned_line_id) payload.assigned_line_id = Number(form.assigned_line_id);
+        await updateUser(editing.user_id, payload);
+        if (form.password) await resetPassword(editing.user_id, form.password);
+        toast('success', 'User updated');
+      } else {
+        await createUser({
+          username: form.username,
+          password: form.password,
+          full_name: form.full_name,
+          email: form.email || undefined,
+          role: form.role,
+          assigned_line_id: form.assigned_line_id ? Number(form.assigned_line_id) : undefined,
+        });
+        toast('success', 'User created');
+      }
+      setShowForm(false);
+      fetchUsers();
+    } catch (err) {
+      const message = isAxiosError(err)
+        ? (err.response?.data as { message?: string } | undefined)?.message
+        : undefined;
+      toast('error', message || 'Failed to save the user');
+    }
   };
 
   const handleDelete = async (id: number) => {
@@ -136,7 +150,7 @@ export default function Users() {
         <Select label="Role" value={form.role} onChange={e => setForm({ ...form, role: e.target.value })}
           options={[{ value: 'LINE_MANAGER', label: 'Line Manager' }, { value: 'ADMIN', label: 'Admin' }]} />
         <Select label="Assigned Line" value={form.assigned_line_id} onChange={e => setForm({ ...form, assigned_line_id: e.target.value })}
-          options={lines.map(l => ({ value: l.line_id, label: l.line_name }))} placeholder="No line" />
+          options={lines.map(l => ({ value: l.line_id, label: l.line_name }))} placeholder="Select a line (required for line managers)" />
       </Modal>
     </div>
   );

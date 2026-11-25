@@ -4,6 +4,7 @@ export type ReportSort =
   | 'order_no'
   | 'customer'
   | 'product'
+  | 'gender'
   | 'line'
   | 'produced'
   | 'target'

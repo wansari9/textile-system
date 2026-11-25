@@ -11,6 +11,7 @@ export interface NewOrderCustomer {
 export interface NewOrderPayload {
   customer_id?: number;
   customer?: NewOrderCustomer;
+  order_no?: string;
   product_name: string;
   style_code?: string;
   color?: string;
@@ -36,6 +37,8 @@ export const getOrders = async (params?: {
   from?: string;
   to?: string;
   search?: string;
+  sort?: string;
+  dir?: 'asc' | 'desc';
 }) => {
   const { data } = await apiClient.get('/orders', { params });
   return data;
