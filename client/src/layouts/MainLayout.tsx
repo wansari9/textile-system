@@ -41,7 +41,7 @@ const allNavItems: NavItem[] = [
   { name: 'Branches', path: '/branches', icon: GitBranch, roles: ['ADMIN'] },
   { name: 'Reports', path: '/reports', icon: BarChart3, roles: ['ADMIN'], separator: true },
   { name: 'Users', path: '/users', icon: UsersIcon, roles: ['ADMIN'] },
-  { name: 'Hourly Entry', path: '/entry', icon: ClipboardList, roles: ['LINE_MANAGER', 'SUPERVISOR'] },
+  { name: 'Hourly Entry', path: '/entry', icon: ClipboardList, roles: ['ADMIN', 'LINE_MANAGER', 'SUPERVISOR'] },
 ];
 
 const pageTitles: Record<string, string> = {

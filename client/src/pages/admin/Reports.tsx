@@ -121,7 +121,7 @@ export default function Reports() {
               { header: 'Customer', accessor: 'customer_name', sortKey: 'customer' },
               { header: 'Gender', accessor: 'gender', sortKey: 'gender', format: genderLabel },
               { header: 'Total Produced', accessor: 'total_produced', sortKey: 'produced' },
-              { header: 'Total Faults', accessor: 'total_defect' },
+              { header: 'Total Faults', accessor: 'total_defect', sortKey: 'defects' },
               { header: 'Daily Target', accessor: 'daily_target', sortKey: 'target' },
               { header: 'Efficiency Rate', accessor: 'pct_of_target', sortKey: 'pct' },
             ]}
@@ -145,7 +145,7 @@ export default function Reports() {
             { header: 'Customer', accessor: 'customer_name', sortKey: 'customer' },
             { header: 'Gender', accessor: 'gender', sortKey: 'gender', format: genderLabel },
             { header: 'Total Produced', accessor: 'total_produced', sortKey: 'produced' },
-            { header: 'Total Faults', accessor: 'total_defect' },
+            { header: 'Total Faults', accessor: 'total_defect', sortKey: 'defects' },
             { header: 'Daily Target', accessor: 'total_target', sortKey: 'target' },
           ]}
           data={Array.isArray(data) ? data : []}

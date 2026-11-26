@@ -3,7 +3,7 @@
 > **Textile Production Line Management System**
 > Full codebase reference: architecture, database, API, frontend, and file map.
 
-**Last scanned:** 2026-11-22
+**Last scanned:** 2026-11-26
 **Repo root:** `textile-system/`
 **Purpose:** A production management system for textile factories - hourly line production, workforce, cutting/stitching/ironing/packing stages, quality control, branches, customers, orders with gender and line scores, users, and reporting.
 
@@ -542,7 +542,7 @@ All responses are JSON with `success` plus `data` or `message`.
 
 | Method | Path | Auth | Query | Returns |
 |---|---|---|---|---|
-| GET | `/reports/daily` | 🔐 | `date` (required), `sort?`, `dir?` | `{ total, by_line[] }`; sort keys `order_no`, `customer`, `product`, `gender`, `line`, `produced`, `target`, `pct`, `date` |
+| GET | `/reports/daily` | 🔐 | `date` (required), `sort?`, `dir?` | `{ total, by_line[] }`; sort keys `order_no`, `customer`, `product`, `gender`, `line`, `produced`, `defects`, `target`, `pct`, `date` |
 | GET | `/reports/weekly` | 🔐 | `start`, `end` (required), `sort?`, `dir?` | Weekly rows joined with line/product/customer and the same whitelist |
 | GET | `/reports/overview` | 🔐 | `date?` | One payload for the dashboard: `totals`, `by_customer`, `by_order`, `by_branch`, `by_line`, `by_hour`, `stages`, `quality` |
 | GET | `/reports/customer/:id` | 🔐 | — | Per-product order progress for a customer |
@@ -596,8 +596,9 @@ Guards live in `client/src/auth/guards.tsx`: unauthenticated users go to `/login
 - Fixed sidebar (`w-60` expanded / `w-14` collapsed) + sticky top header.
 - Brand: **AmirtexOS** with factory icon.
 - Nav items declared in `allNavItems` with an allowed-role list:
-  - Admin: Dashboard, Orders, Production Lines, Daily Production, Quality, Customers, Branches, Reports, Users.
+  - Admin: Dashboard, Orders, Production Lines, Daily Production, Quality, Customers, Branches, Reports, Users, Hourly Entry.
   - Line manager (and legacy `SUPERVISOR`): Hourly Entry only, scoped to their own line.
+- `Hourly Entry` is shared: admins can enter any line, while line managers are locked to their assigned line by the API. The sidebar hides the admin pages from line managers, and route guards reject direct visits.
 - Page title map keyed by pathname.
 - Mobile drawer with overlay; desktop collapse toggle.
 - Reads the signed-in user from `lib/session.ts`; there is no hardcoded/dev user. Logout clears the session and returns to `/login`.
@@ -791,8 +792,9 @@ Cutting upserts on `(stage, product_id, date, line_key)`; other stages upsert on
 - **Daily** — factory total + per-line/product breakdown, with Order # and Gender columns.
 - **Weekly** — `vw_weekly_summary` filtered by `week_start`, enriched with line/product/customer/order/gender.
 - **All Companies** — `vw_company_daily_total`.
-- **Orders** — order list sorted by order number by default.
-- Sortable headers send `sort` + `dir`; the server validates them against a whitelist. The chosen sort is kept when the date changes.
+- **Orders** — order-level list with Order #, product, customer, gender, quantity, daily target, produced, progress and status. It opens sorted by `order_no` ascending.
+- Sortable headers send `sort` + `dir`; the server validates them against a whitelist (`order_no`, `customer`, `product`, `gender`, `line`, `produced`, `defects`, `target`, `pct`, `date` for daily/weekly; `order_no`, `order_date`, `customer`, `product`, `gender`, `quantity`, `target`, `produced`, `pct`, `status` for orders). Clicking the same header toggles ascending/descending.
+- Sort state is stored per tab in `Reports.tsx`, so switching tabs or changing the report date does not reset it. The Orders tab keeps its order-number sort across date changes even though the order list itself is not date-filtered.
 - CSV export is client-side in `ReportTable`.
 
 ### 11.7 Creating an order (customer + order in one submit)
@@ -862,6 +864,14 @@ Alternative: set `VITE_API_BASE_URL=/api` to use the Vite proxy (recommended if 
 
 ### Default login
 `admin` / `admin123`
+
+### Phase 9 verification (2026-11-26)
+
+- **Scratch database:** created `textile_scratch`, applied `ai_studio_code.sql`, then migrations `001`–`007` in order, then ran the seed. Result: 12 tables, 11 views, `Cutting 1/2/3` and the demo admin/manager/order present.
+- **Real database:** re-applied migrations `001`–`007` to `textile_db`. All statements are idempotent; result: 12 tables, 11 views, order/line/stage columns present.
+- **Builds:** `npm run build` passed in both `server/` (tsc) and `client/` (tsc + Vite).
+- **API smoke test:** admin login; every page's primary data source; line-manager login; manager sees only its own line and receives `403` for another line; manager hourly write is forced onto its own line; new-customer order creation; sewing-line assignment; hourly entry; cutting on all three cutting lines; ironing, packing and quality; line score equals capped attainment; daily/weekly/orders sorting by order number in both directions and daily sorting by total faults in both directions.
+- **UI smoke test:** admin sidebar navigation across Dashboard, Orders, Production Lines, Daily Production, Quality, Customers, Branches, Reports, Users and Hourly Entry; Reports → Orders tab sorts by Order # ascending/descending and keeps the direction after a date change; line manager lands on `/entry`, sees only the Hourly Entry nav item, and is redirected away from `/orders`.
 
 ---
 
@@ -979,7 +989,7 @@ Line-scoped routers should compare `req.user.line_id` instead of trusting a body
 | `server/src/config/db.ts` | 28 | `pg.Pool` + `query()` helper |
 | `server/src/middleware/auth.ts` | 87 | JWT Bearer verification, role/line guards |
 | `server/src/controllers/authController.ts` | 58 | Login: lookup, bcrypt, JWT |
-| `server/src/controllers/productionController.ts` | 77 | Hourly upsert, hourly fetch, daily report |
+| `server/src/controllers/productionController.ts` | 129 | Hourly upsert, hourly fetch, daily report |
 | `server/src/routes/auth.ts` | 14 | `POST /login`, `GET /me` |
 | `server/src/routes/production.ts` | 15 | Hourly + daily-report routes |
 | `server/src/routes/customers.ts` | 104 | Customer CRUD + soft delete |
@@ -990,8 +1000,8 @@ Line-scoped routers should compare `req.user.line_id` instead of trusting a body
 | `server/src/routes/branches.ts` | 185 | Branch CRUD, daily production, summary |
 | `server/src/routes/stages.ts` | 161 | Stage upsert/list/summary; cutting `line_id` |
 | `server/src/routes/quality.ts` | 76 | Quality upsert + view query |
-| `server/src/routes/reports.ts` | 356 | Daily, weekly, overview, customer, line, efficiency, company + sort whitelist |
-| `server/src/routes/users.ts` | 190 | User CRUD, password reset, line-manager validation, soft delete |
+| `server/src/routes/reports.ts` | 358 | Daily, weekly, overview, customer, line, efficiency, company + sort whitelist |
+| `server/src/routes/users.ts` | 197 | User CRUD, password reset, line-manager validation, soft delete |
 
 ### Client
 
@@ -1014,12 +1024,12 @@ Line-scoped routers should compare `req.user.line_id` instead of trusting a body
 | `client/src/api/auth.ts` | 28 | `login`, `getMe` |
 | `client/src/api/branches.ts` | 17 | Branch reads + daily upsert |
 | `client/src/api/customers.ts` | 26 | Customer CRUD |
-| `client/src/api/orders.ts` | 60 | Orders list/get/create |
-| `client/src/api/lines.ts` | 35 | Lines, current, assign, create/update |
+| `client/src/api/orders.ts` | 55 | Orders list/get/create |
+| `client/src/api/lines.ts` | 39 | Lines, current, assign, create/update |
 | `client/src/api/production.ts` | 19 | Hourly save/fetch |
 | `client/src/api/products.ts` | 42 | Product CRUD + by-customer |
 | `client/src/api/quality.ts` | 16 | Quality save/fetch |
-| `client/src/api/reports.ts` | 31 | All report endpoints |
+| `client/src/api/reports.ts` | 65 | All report endpoints |
 | `client/src/api/stages.ts` | 21 | Stage save/list/summary |
 | `client/src/api/users.ts` | 33 | User CRUD + password reset |
 | `client/src/api/workforce.ts` | 17 | Workforce save/fetch |
@@ -1039,7 +1049,7 @@ Line-scoped routers should compare `req.user.line_id` instead of trusting a body
 | `client/src/components/ui/Spinner.tsx` | 27 | SVG spinner |
 | `client/src/components/ui/Skeleton.tsx` | 50 | Text/circle/rect + table/card presets |
 | `client/src/components/ui/Toast.tsx` | 75 | Toast context/provider, 4 types, 4s auto-dismiss |
-| `client/src/pages/auth/Login.tsx` | 140 | Brand panel + login form + role landing |
+| `client/src/pages/auth/Login.tsx` | 149 | Brand panel + login form + role landing |
 | `client/src/pages/admin/Dashboard.tsx` | 715 | Overview hero + tabs: Customers/Orders/Branches/Lines |
 | `client/src/pages/admin/Lines.tsx` | 295 | Sewing/cutting tables, create/edit, assign modal with score |
 | `client/src/pages/admin/Orders.tsx` | 439 | Order table + combined customer/order modal |
@@ -1047,7 +1057,7 @@ Line-scoped routers should compare `req.user.line_id` instead of trusting a body
 | `client/src/pages/admin/Branches.tsx` | 142 | Branch daily entry + summary table |
 | `client/src/pages/admin/Reports.tsx` | 223 | Daily/Weekly/Company/Orders tabs + sorting |
 | `client/src/pages/admin/Users.tsx` | 157 | User table + create/edit/reset/deactivate |
-| `client/src/pages/supervisor/HourlyEntry.tsx` | 177 | Loads lines/workforce, saves all entries |
+| `client/src/pages/supervisor/HourlyEntry.tsx` | 186 | Loads lines/workforce, saves all entries |
 | `client/src/pages/supervisor/ProcessStages.tsx` | 406 | Five-tab daily production entry |
 | `client/src/pages/supervisor/Quality.tsx` | 30 | QC page wrapping `QualityForm` |
 | `client/public/favicon.svg`, `client/public/icons.svg` | — | Static assets |

@@ -7,6 +7,7 @@ export type ReportSort =
   | 'gender'
   | 'line'
   | 'produced'
+  | 'defects'
   | 'target'
   | 'pct'
   | 'date';

@@ -174,7 +174,9 @@ links to hourly entry. Ironing and Packing are one daily total per order. Qualit
 embeds the same form as `/quality`, so the pass-rate gauge behaves identically.
 
 ### Hourly entry
-Line tabs, then a single horizontally scrollable grid: sticky line/customer/style
+Admins can open Hourly Entry from the sidebar and switch lines; a line manager
+sees only their assigned line and the nav collapses to that single task. Line
+tabs, then a single horizontally scrollable grid: sticky line/customer/style
 columns on the left, twelve hour cells in the middle, sticky total and variance on
 the right. Arrow keys and Enter move between cells. A running-total banner states
 how many units per hour are still needed.
@@ -185,10 +187,27 @@ ghost action in the risk colour. Empty and loading states are distinct.
 
 ### Reports
 Tabs for Daily, Weekly, All Companies and Orders. Order and Gender are always
-visible columns. A column header that can be sorted looks and behaves like a
-button and shows the current direction; sorting is server-side, so the page only
-sends the whitelisted key and direction. Sort state belongs to the tab and
-survives date changes. CSV export stays available on every tab.
+visible columns on the Daily, Weekly and Orders tabs. A column header that can be
+sorted looks and behaves like a button and shows the current direction; sorting is
+server-side, so the page only sends the whitelisted key and direction. Sort state
+belongs to the tab and survives date changes. The Orders tab opens sorted by order
+number ascending, so the newest generated order numbers stay predictable; clicking
+Order # toggles the direction. CSV export stays available on every tab.
+
+### Order lifecycle
+1. **Create** on `/orders`: choose an existing customer or type a new one inline,
+   then enter order number (optional), product/style, gender, quantity, daily
+   target and dates. One submit creates the customer and the order together.
+2. **Assign** on `/lines`: pick a sewing line and a daily target. The previous
+   active assignment on that line is closed automatically; the order moves from
+   `PENDING` to `ACTIVE`.
+3. **Enter hourly output** on `/entry` for the assigned sewing line; the line
+   manager sees only their own line, and admins can enter any line.
+4. **Record stages** on `/stages`: cutting per cutting line, ironing and packing
+   per order, and quality in the embedded form.
+5. **Report** on `/reports`: the order appears in Daily/Weekly (once hourly data
+   exists) and in the Orders tab regardless of production. Sort by Order # in
+   either direction and change the report date without losing that choice.
 
 ### Login
 Split screen: a dark brand panel stating what the system does, and a quiet form
@@ -205,3 +224,5 @@ role decides the landing page (`/` for admins, `/entry` for line managers).
 4. `src/index.css` and `client/index.html` untouched.
 5. `npm run build` passes in `client/`.
 6. Checked at desktop and tablet widths, with reduced motion enabled.
+7. Sortable table headers send only server-whitelisted `sort` keys; never sort
+   report data client-side or trust a free-form column name.
