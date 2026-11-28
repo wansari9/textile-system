@@ -79,7 +79,7 @@ export default function Branches() {
         header={<h3 className="font-semibold text-ink">Enter Daily Production</h3>}
       >
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full min-w-max text-sm">
             <thead>
               <tr className="text-[10px] text-muted uppercase tracking-[0.14em] border-b border-rule">
                 <th className="text-left pb-3 pr-4 font-medium">Branch</th>

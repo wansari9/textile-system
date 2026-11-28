@@ -3,15 +3,17 @@ import { useNavigate } from 'react-router-dom';
 import { isAxiosError } from 'axios';
 import { login, getMe } from '../../api/auth';
 import { Button, Input } from '../../components/ui';
-import { Factory } from 'lucide-react';
+import { Eye, EyeOff, Factory } from 'lucide-react';
 import { auth } from '../../design';
 import { homeForRole } from '../../domain';
 import { clearSession, getSessionUser, getToken, saveSession } from '../../lib/session';
+import { applyPreferences, loadPreferences, DEFAULT_PREFERENCES } from '../../lib/preferences';
 
 export default function Login() {
   const navigate = useNavigate();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -27,6 +29,7 @@ export default function Login() {
       })
       .catch(() => {
         clearSession();
+        applyPreferences(DEFAULT_PREFERENCES);
       });
 
     return () => {
@@ -42,6 +45,7 @@ export default function Login() {
       const res = await login({ username, password });
       if (res.success && res.token && res.user) {
         saveSession(res.token, res.user);
+        applyPreferences(loadPreferences(res.user.id));
         navigate(homeForRole(res.user.role), { replace: true });
       } else {
         setError('Unexpected response from the server. Please try again.');
@@ -129,14 +133,27 @@ export default function Login() {
                 required
                 autoFocus
               />
-              <Input
-                label="Password"
-                type="password"
-                placeholder="Enter your password"
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                required
-              />
+              <div className="relative">
+                <Input
+                  label="Password"
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="Enter your password"
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  className="pr-11"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(visible => !visible)}
+                  className="absolute right-2 top-[30px] flex h-8 w-8 items-center justify-center rounded-md text-muted transition-colors hover:bg-raw-cotton hover:text-ink"
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  aria-pressed={showPassword}
+                  title={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+                </button>
+              </div>
               <Button type="submit" loading={loading} className="w-full" size="lg">
                 Sign In
               </Button>

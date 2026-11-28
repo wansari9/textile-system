@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import pool from '../config/db';
-import { authenticateToken, isAdmin, requireRole } from '../middleware/auth';
+import { authenticateToken, canAccessLine, isAdmin, lineIdsFor, requireRole } from '../middleware/auth';
 
 const router = Router();
 
@@ -39,14 +39,15 @@ router.get('/', async (req: Request, res: Response) => {
       conditions.push(`pl.line_type = $${params.length}`);
     }
 
-    // Line managers only ever see their own line.
+    // Line managers only ever see the lines assigned to them.
     const user = (req as any).user;
     if (!isAdmin(user)) {
-      if (!user.line_id) {
+      const allowed = lineIdsFor(user);
+      if (allowed.length === 0) {
         return res.json({ success: true, data: [] });
       }
-      params.push(user.line_id);
-      conditions.push(`pl.line_id = $${params.length}`);
+      params.push(allowed);
+      conditions.push(`pl.line_id = ANY($${params.length}::int[])`);
     }
 
     const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -83,8 +84,8 @@ router.get('/', async (req: Request, res: Response) => {
 // GET /api/lines/:id
 router.get('/:id', async (req: Request, res: Response) => {
   const user = (req as any).user;
-  if (!isAdmin(user) && user.line_id !== Number(req.params.id)) {
-    return res.status(403).json({ success: false, message: 'You can only view your own line' });
+  if (!canAccessLine(user, req.params.id)) {
+    return res.status(403).json({ success: false, message: 'You can only view your own lines' });
   }
   try {
     const result = await pool.query(
@@ -231,8 +232,8 @@ router.post('/:id/assign', requireRole('ADMIN'), async (req: Request, res: Respo
 // GET /api/lines/:id/current  (the active assignment running on this line right now)
 router.get('/:id/current', async (req: Request, res: Response) => {
   const user = (req as any).user;
-  if (!isAdmin(user) && user.line_id !== Number(req.params.id)) {
-    return res.status(403).json({ success: false, message: 'You can only view your own line' });
+  if (!canAccessLine(user, req.params.id)) {
+    return res.status(403).json({ success: false, message: 'You can only view your own lines' });
   }
   try {
     const result = await pool.query(

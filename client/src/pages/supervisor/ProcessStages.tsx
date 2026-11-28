@@ -180,7 +180,7 @@ export default function ProcessStages() {
     return (
       <Card padding="none">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full min-w-max text-sm">
             <thead>
               <tr className={table.headRow}>
                 <th className="px-5 py-3 font-medium">Order #</th>
@@ -234,7 +234,7 @@ export default function ProcessStages() {
   const renderCutting = () => (
     <Card padding="none">
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="w-full min-w-max text-sm">
           <thead>
             <tr className={table.headRow}>
               <th className="px-5 py-3 font-medium">Order #</th>
@@ -295,7 +295,7 @@ export default function ProcessStages() {
   const renderStitching = () => (
     <Card padding="none">
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="w-full min-w-max text-sm">
           <thead>
             <tr className={table.headRow}>
               <th className="px-5 py-3 font-medium">Sewing Line</th>

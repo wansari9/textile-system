@@ -29,13 +29,30 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    // 3. Generate JWT Token
+    // 3. Generate JWT Token. line_ids is the authoritative set of lines this
+    //    manager can work on; line_id stays as the primary line for old clients.
+    let lineIds: number[] = [];
+    try {
+      const lines = await pool.query(
+        `SELECT array_agg(ul.line_id ORDER BY ul.line_id) AS line_ids
+         FROM user_lines ul WHERE ul.user_id = $1`,
+        [user.user_id]
+      );
+      lineIds = (lines.rows[0]?.line_ids || []).map(Number);
+    } catch (error: any) {
+      if (error?.code !== '42P01') throw error;
+    }
+    if (lineIds.length === 0 && user.assigned_line_id) {
+      lineIds = [Number(user.assigned_line_id)];
+    }
+
     const token = jwt.sign(
       {
         id: user.user_id,
         role: user.role,
         name: user.full_name,
-        line_id: user.assigned_line_id ?? null,
+        line_id: lineIds[0] ?? null,
+        line_ids: lineIds,
       },
       process.env.JWT_SECRET || 'super_secret_key_change_this_later',
       { expiresIn: '1d' } // Token lasts for 1 day
@@ -50,7 +67,8 @@ export const login = async (req: Request, res: Response): Promise<void> => {
         username: user.username,
         name: user.full_name,
         role: user.role,
-        line_id: user.assigned_line_id
+        line_id: lineIds[0] ?? null,
+        line_ids: lineIds,
       }
     });
   } catch (error: any) {

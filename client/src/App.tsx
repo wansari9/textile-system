@@ -11,6 +11,7 @@ import Reports from './pages/admin/Reports';
 import Users from './pages/admin/Users';
 import ProcessStages from './pages/supervisor/ProcessStages';
 import Quality from './pages/supervisor/Quality';
+import Settings from './pages/admin/Settings';
 import { ToastProvider } from './components/ui/Toast';
 import { HomeRedirect, RequireAuth, RequireRole } from './auth/guards';
 
@@ -27,6 +28,9 @@ function App() {
               <Route element={<RequireRole roles={['ADMIN', 'LINE_MANAGER']} />}>
                 <Route path="entry" element={<HourlyEntry />} />
               </Route>
+
+              {/* Every signed-in user can personalise their own interface. */}
+              <Route path="settings" element={<Settings />} />
 
               {/* Admin-only pages */}
               <Route element={<RequireRole roles={['ADMIN']} />}>

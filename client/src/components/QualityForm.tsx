@@ -75,7 +75,7 @@ export default function QualityForm({ date, onSaved }: QualityFormProps) {
             options={customers.map((c: any) => ({ value: c.customer_id, label: c.customer_name }))}
             placeholder="Select customer" />
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Input label="Pieces Checked" type="number" value={checked} onChange={e => setChecked(Number(e.target.value))} />
             <Input label="Total Faults" type="number" value={faults} onChange={e => setFaults(Number(e.target.value))} />
           </div>

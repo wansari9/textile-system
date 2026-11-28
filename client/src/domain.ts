@@ -33,6 +33,8 @@ export interface SessionUser {
   name: string;
   role: UserRole | string;
   line_id: number | null;
+  /** Every line a line manager can manage. */
+  line_ids?: number[];
 }
 
 export const GENDERS = ['MEN', 'WOMEN', 'BOYS', 'GIRLS', 'KIDS', 'UNISEX'] as const;

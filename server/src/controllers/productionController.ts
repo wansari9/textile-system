@@ -1,15 +1,28 @@
 import { Request, Response } from 'express';
 import pool from '../config/db';
+import { canAccessLine, lineIdsFor } from '../middleware/auth';
 
 // POST: Log Hourly Production — upsert so users can update values.
-// Admins choose the line; line managers are locked to their assigned line and
-// the active assignment on it, so the body can never point at another line.
+// Admins choose the line; line managers may only choose one of their assigned
+// lines, so the body can never point at someone else's line.
 export const logHourlyProduction = async (req: Request, res: Response): Promise<void> => {
   const authUser = (req as any).user;
   const admin = authUser.role === 'ADMIN';
   const { production_date, hour_number, qty_produced, qty_defect } = req.body;
 
-  const lineId: number | null = admin ? req.body.line_id ?? null : authUser.line_id;
+  let lineId: number | null = req.body.line_id ? Number(req.body.line_id) : null;
+  if (!admin) {
+    const allowed = lineIdsFor(authUser);
+    if (allowed.length === 0) {
+      res.status(403).json({ success: false, message: 'No production line is assigned to this account' });
+      return;
+    }
+    if (!lineId) lineId = allowed[0];
+    if (!canAccessLine(authUser, lineId)) {
+      res.status(403).json({ success: false, message: 'You can only enter production for your assigned lines' });
+      return;
+    }
+  }
   if (!lineId) {
     res.status(403).json({ success: false, message: 'No production line is assigned to this account' });
     return;
@@ -36,7 +49,7 @@ export const logHourlyProduction = async (req: Request, res: Response): Promise<
         [lineId]
       );
       if (!current.rows[0]) {
-        res.status(409).json({ success: false, message: 'No active assignment on your line' });
+        res.status(409).json({ success: false, message: 'No active assignment on this line' });
         return;
       }
       assignmentId = current.rows[0].assignment_id;
@@ -68,7 +81,7 @@ export const logHourlyProduction = async (req: Request, res: Response): Promise<
 };
 
 // GET: Hourly production records for a given date (used to pre-fill HourlyEntry on reload)
-// Line managers only ever receive rows for their own line.
+// Line managers only ever receive rows for their assigned lines.
 export const getHourlyProduction = async (req: Request, res: Response): Promise<void> => {
   const { date } = req.query;
   if (!date) {
@@ -78,10 +91,19 @@ export const getHourlyProduction = async (req: Request, res: Response): Promise<
 
   const authUser = (req as any).user;
   const admin = authUser.role === 'ADMIN';
-  const lineId = admin ? req.query.line_id : authUser.line_id;
-  if (!admin && !lineId) {
-    res.status(200).json({ success: true, data: [] });
-    return;
+  const requestedLineId = req.query.line_id ? Number(req.query.line_id) : null;
+
+  let allowedLineIds: number[] | null = null;
+  if (!admin) {
+    allowedLineIds = lineIdsFor(authUser);
+    if (allowedLineIds.length === 0) {
+      res.status(200).json({ success: true, data: [] });
+      return;
+    }
+    if (requestedLineId && !allowedLineIds.includes(requestedLineId)) {
+      res.status(403).json({ success: false, message: 'You can only view your assigned lines' });
+      return;
+    }
   }
 
   try {
@@ -89,9 +111,12 @@ export const getHourlyProduction = async (req: Request, res: Response): Promise<
     let sql = `SELECT log_id, line_id, hour_number, qty_produced, qty_defect
                FROM hourly_production
                WHERE production_date = $1`;
-    if (lineId) {
-      params.push(lineId);
+    if (requestedLineId) {
+      params.push(requestedLineId);
       sql += ` AND line_id = $${params.length}`;
+    } else if (allowedLineIds) {
+      params.push(allowedLineIds);
+      sql += ` AND line_id = ANY($${params.length}::int[])`;
     }
     sql += ` ORDER BY line_id, hour_number`;
 

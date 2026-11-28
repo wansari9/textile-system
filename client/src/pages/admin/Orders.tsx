@@ -243,7 +243,7 @@ export default function Orders() {
 
       <Card padding="none">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full min-w-max text-sm">
             <thead>
               <tr className={table.headRow}>
                 <th className="px-5 py-3 font-medium">Order #</th>
@@ -333,7 +333,7 @@ export default function Orders() {
         }
       >
         {!editing && (
-          <div className="grid grid-cols-2 gap-2 rounded-lg border border-rule bg-canvas/60 p-1">
+          <div className="grid grid-cols-1 gap-2 rounded-lg border border-rule bg-canvas/60 p-1 sm:grid-cols-2">
             {(['existing', 'new'] as const).map(mode => (
               <button
                 key={mode}
@@ -366,7 +366,7 @@ export default function Orders() {
               value={form.customer.customer_name}
               onChange={e => setForm({ ...form, customer: { ...form.customer, customer_name: e.target.value } })}
             />
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Input
                 label="Contact Person"
                 value={form.customer.contact_person}
@@ -387,7 +387,7 @@ export default function Orders() {
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Input
             label="Order Number"
             value={form.order_no}
@@ -408,16 +408,16 @@ export default function Orders() {
           value={form.product_name}
           onChange={e => setForm({ ...form, product_name: e.target.value })}
         />
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <Input label="Style Code" value={form.style_code} onChange={e => setForm({ ...form, style_code: e.target.value })} />
           <Input label="Color" value={form.color} onChange={e => setForm({ ...form, color: e.target.value })} />
           <Input label="Size" value={form.size} onChange={e => setForm({ ...form, size: e.target.value })} />
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Input label="Order Quantity" type="number" value={form.order_quantity} onChange={e => setForm({ ...form, order_quantity: e.target.value })} />
           <Input label="Daily Target" type="number" value={form.daily_target} onChange={e => setForm({ ...form, daily_target: e.target.value })} />
         </div>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <Input label="Order Date" type="date" value={form.order_date} onChange={e => setForm({ ...form, order_date: e.target.value })} />
           <Input label="Start Date" type="date" value={form.start_date} onChange={e => setForm({ ...form, start_date: e.target.value })} />
           <Input label="Due Date" type="date" value={form.due_date} onChange={e => setForm({ ...form, due_date: e.target.value })} />

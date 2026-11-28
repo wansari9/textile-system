@@ -76,7 +76,9 @@ CREATE DATABASE textile_db;
 
 ## 3. Run the Schema & Seed
 
-Apply the full schema (tables, indexes, views, triggers):
+`ai_studio_code.sql` is the single database setup file. It contains every table,
+index, trigger and reporting view, and folds in all previously separate
+migrations. It is safe to re-run.
 
 ```bash
 # macOS / Linux
@@ -86,13 +88,8 @@ psql -U postgres -d textile_db -f ai_studio_code.sql
 & "C:\Program Files\PostgreSQL\16\bin\psql.exe" -U postgres -d textile_db -f ai_studio_code.sql
 ```
 
-Apply the migration (adds `notes` column to `daily_workforce`):
-
-```bash
-psql -U postgres -d textile_db -f server/migrations/001_add_workforce_notes.sql
-```
-
-Seed the database with default admin user, branches, lines, and a dummy customer/product:
+Seed the database with the default admin/manager accounts, branches, production
+lines and a demo customer/product:
 
 ```bash
 cd server
@@ -106,6 +103,10 @@ Default credentials after seeding:
 |---|---|
 | Username | `admin` |
 | Password | `admin123` |
+
+> **Upgrading an existing database:** run the same file. Its compatibility block
+> adds any missing columns, constraints and indexes without deleting data, and
+> `npm run seed` is idempotent.
 
 ---
 
@@ -230,7 +231,6 @@ textile-system/
 │   └── vite.config.ts
 │
 ├── server/                     # Express + TypeScript backend
-│   ├── migrations/             # Incremental SQL migrations
 │   ├── src/
 │   │   ├── config/db.ts        # PostgreSQL connection pool
 │   │   ├── controllers/        # Route handlers
@@ -241,7 +241,7 @@ textile-system/
 │   ├── .env
 │   └── tsconfig.json
 │
-├── ai_studio_code.sql          # Full schema (tables, views, triggers)
+├── ai_studio_code.sql          # Single database setup file (tables, views, triggers)
 ├── SETUP.md                    # This file
 └── .gitignore
 ```

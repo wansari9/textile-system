@@ -16,12 +16,14 @@ import {
   Menu,
   Bookmark,
   LogOut,
+  Settings as SettingsIcon,
 } from 'lucide-react';
 import { useState, useMemo } from 'react';
 import { addDays, toISODate } from '../lib/date';
 import { layout } from '../design';
 import { ROLE_LABELS, isAdminRole, isLineManagerRole } from '../domain';
 import { clearSession, getSessionUser } from '../lib/session';
+import { applyPreferences, DEFAULT_PREFERENCES } from '../lib/preferences';
 
 interface NavItem {
   name: string;
@@ -42,6 +44,7 @@ const allNavItems: NavItem[] = [
   { name: 'Reports', path: '/reports', icon: BarChart3, roles: ['ADMIN'], separator: true },
   { name: 'Users', path: '/users', icon: UsersIcon, roles: ['ADMIN'] },
   { name: 'Hourly Entry', path: '/entry', icon: ClipboardList, roles: ['ADMIN', 'LINE_MANAGER', 'SUPERVISOR'] },
+  { name: 'Settings', path: '/settings', icon: SettingsIcon, roles: ['ADMIN', 'LINE_MANAGER', 'SUPERVISOR'], separator: true },
 ];
 
 const pageTitles: Record<string, string> = {
@@ -55,6 +58,7 @@ const pageTitles: Record<string, string> = {
   '/users': 'User Management',
   '/stages': 'Daily Production',
   '/quality': 'Quality Control',
+  '/settings': 'Settings',
 };
 
 export default function MainLayout() {
@@ -84,6 +88,7 @@ export default function MainLayout() {
 
   const handleLogout = () => {
     clearSession();
+    applyPreferences(DEFAULT_PREFERENCES);
     navigate('/login');
   };
 

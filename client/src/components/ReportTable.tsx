@@ -45,6 +45,7 @@ export default function ReportTable({ title, columns, data, sort, onSort }: Repo
 
   const display = (row: any, col: Column, idx: number) => {
     const value = valueOf(row, col);
+    if (value === null || value === undefined || value === '') return '—';
     return numericColumns[idx] && typeof value === 'number' ? value.toLocaleString() : value;
   };
 

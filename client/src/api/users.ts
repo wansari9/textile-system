@@ -11,6 +11,7 @@ export const createUser = async (payload: {
   full_name: string;
   email?: string;
   role: string;
+  assigned_line_ids?: number[];
   assigned_line_id?: number;
 }) => {
   const { data } = await apiClient.post('/users', payload);

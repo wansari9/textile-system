@@ -83,6 +83,18 @@ async function seed() {
       console.log('⚠️ Line manager already exists');
     }
 
+    // user_lines is the authoritative multi-line set. Backfill it from the
+    // legacy single-line column for every account, including accounts that
+    // existed before this table was introduced.
+    await pool.query(
+      `INSERT INTO user_lines (user_id, line_id)
+       SELECT user_id, assigned_line_id
+         FROM users
+        WHERE assigned_line_id IS NOT NULL
+       ON CONFLICT (user_id, line_id) DO NOTHING`
+    );
+    console.log('✅ user_lines synced from assigned_line_id');
+
     // ---------------------------------------------------------------
     // Customer + sample order
     // ---------------------------------------------------------------

@@ -1,11 +1,11 @@
 import { Router, Request, Response } from 'express';
 import pool from '../config/db';
-import { authenticateToken } from '../middleware/auth';
+import { authenticateToken, canAccessLine, lineIdsFor } from '../middleware/auth';
 
 const router = Router();
 
 // Admins and line managers both record workforce, but a line manager is locked
-// to their own line.
+// to the lines assigned to them.
 router.use(authenticateToken);
 
 // POST /api/workforce  (upsert today's headcount for a line — one row per line per day)
@@ -14,7 +14,17 @@ router.post('/', async (req: Request, res: Response) => {
   const admin = authUser.role === 'ADMIN';
   const { production_date, workers_required, workers_present, notes } = req.body;
 
-  const lineId: number | null = admin ? req.body.line_id ?? null : authUser.line_id;
+  let lineId: number | null = req.body.line_id ? Number(req.body.line_id) : null;
+  if (!admin) {
+    const allowed = lineIdsFor(authUser);
+    if (allowed.length === 0) {
+      return res.status(403).json({ success: false, message: 'No production line is assigned to this account' });
+    }
+    if (!lineId) lineId = allowed[0];
+    if (!canAccessLine(authUser, lineId)) {
+      return res.status(403).json({ success: false, message: 'You can only record workforce for your assigned lines' });
+    }
+  }
   if (!lineId) {
     return res.status(403).json({ success: false, message: 'No production line is assigned to this account' });
   }
@@ -48,24 +58,33 @@ router.post('/', async (req: Request, res: Response) => {
 });
 
 // GET /api/workforce  (?line_id=&date=  or  ?line_id=&from=&to=)
-// Line managers only ever receive rows for their own line.
+// Line managers only ever receive rows for their assigned lines.
 router.get('/', async (req: Request, res: Response) => {
   const authUser = (req as any).user;
   const admin = authUser.role === 'ADMIN';
   const { line_id, date, from, to } = req.query;
 
-  const scopedLineId = admin ? line_id : authUser.line_id;
-  if (!admin && !scopedLineId) {
-    return res.json({ success: true, data: [] });
+  let scopedLineIds: number[] | null = null;
+  if (!admin) {
+    scopedLineIds = lineIdsFor(authUser);
+    if (scopedLineIds.length === 0) {
+      return res.json({ success: true, data: [] });
+    }
+    if (line_id && !scopedLineIds.includes(Number(line_id))) {
+      return res.status(403).json({ success: false, message: 'You can only view your assigned lines' });
+    }
   }
 
   try {
     const conditions: string[] = [];
     const params: any[] = [];
 
-    if (scopedLineId) {
-      params.push(scopedLineId);
+    if (line_id) {
+      params.push(line_id);
       conditions.push(`dw.line_id = $${params.length}`);
+    } else if (scopedLineIds) {
+      params.push(scopedLineIds);
+      conditions.push(`dw.line_id = ANY($${params.length}::int[])`);
     }
     if (date) {
       params.push(date);

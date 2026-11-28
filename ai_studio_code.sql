@@ -1,9 +1,31 @@
 -- =====================================================================
--- Textile Production Line Management System
--- PostgreSQL Database Schema
+-- AmirtexOS — single database setup file
+-- PostgreSQL 14+
+-- =====================================================================
+--
+-- Fresh install:
+--   createdb textile_db
+--   psql -U postgres -d textile_db -f ai_studio_code.sql
+--   cd server && npm run seed
+--
+-- `npm run seed` creates the default admin/manager accounts, branches,
+-- production lines and demo data. This file only owns the schema.
+--
+-- The file is safe to re-run. Tables, indexes and the sequence use
+-- IF NOT EXISTS; views use CREATE OR REPLACE; and the compatibility block
+-- adds columns/constraints that an older database may be missing. It never
+-- drops tables or user data.
+--
+-- Everything below replaces the former server/migrations/001–008 files.
 -- =====================================================================
 
-CREATE TABLE branches (
+BEGIN;
+
+-- ---------------------------------------------------------------------
+-- 1. Core tables (dependency order)
+-- ---------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS branches (
     branch_id SERIAL PRIMARY KEY,
     branch_name VARCHAR(100) NOT NULL UNIQUE,
     is_main SMALLINT DEFAULT 0 CHECK (is_main IN (0,1)),
@@ -11,30 +33,61 @@ CREATE TABLE branches (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE users (
+CREATE TABLE IF NOT EXISTS production_lines (
+    line_id SERIAL PRIMARY KEY,
+    branch_id INTEGER NOT NULL REFERENCES branches(branch_id),
+    line_name VARCHAR(50) NOT NULL UNIQUE,
+    line_type VARCHAR(20) NOT NULL DEFAULT 'SEWING'
+        CHECK (line_type IN ('SEWING','CUTTING')),
+    status VARCHAR(20) DEFAULT 'ACTIVE'
+        CHECK (status IN ('ACTIVE','MAINTENANCE','INACTIVE')),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- assigned_line_id is the manager's primary line; user_lines is the full set.
+-- Re-declared here so a database created before multi-line support gets it.
+CREATE TABLE IF NOT EXISTS users (
     user_id SERIAL PRIMARY KEY,
     username VARCHAR(50) NOT NULL UNIQUE,
     password_hash VARCHAR(255) NOT NULL,
     full_name VARCHAR(100) NOT NULL,
     email VARCHAR(150),
-    role VARCHAR(20) NOT NULL CHECK (role IN ('ADMIN','LINE_MANAGER','SUPERVISOR')),
-    assigned_line_id INTEGER, -- FK added below
+    role VARCHAR(20) NOT NULL
+        CHECK (role IN ('ADMIN','LINE_MANAGER','SUPERVISOR')),
+    assigned_line_id INTEGER,
     is_active SMALLINT DEFAULT 1 CHECK (is_active IN (0,1)),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE branch_daily_production (
-    record_id SERIAL PRIMARY KEY,
-    branch_id INTEGER NOT NULL REFERENCES branches(branch_id),
-    production_date DATE NOT NULL,
-    daily_target INTEGER DEFAULT 0 CHECK (daily_target >= 0),
-    qty_produced INTEGER DEFAULT 0 CHECK (qty_produced >= 0),
-    entered_by INTEGER REFERENCES users(user_id),
-    entered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT uq_branch_daily UNIQUE (branch_id, production_date)
+ALTER TABLE users ADD COLUMN IF NOT EXISTS assigned_line_id INTEGER;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+      FROM pg_constraint c
+      JOIN pg_class t ON t.oid = c.conrelid
+      JOIN pg_attribute a
+        ON a.attrelid = t.oid AND a.attnum = ANY (c.conkey)
+     WHERE c.contype = 'f'
+       AND t.relname = 'users'
+       AND a.attname = 'assigned_line_id'
+  ) THEN
+    ALTER TABLE users
+      ADD CONSTRAINT fk_users_line
+      FOREIGN KEY (assigned_line_id) REFERENCES production_lines(line_id);
+  END IF;
+END $$;
+
+-- A line manager can manage several lines.
+CREATE TABLE IF NOT EXISTS user_lines (
+    user_id INTEGER NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    line_id INTEGER NOT NULL REFERENCES production_lines(line_id) ON DELETE CASCADE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id, line_id)
 );
 
-CREATE TABLE customers (
+CREATE TABLE IF NOT EXISTS customers (
     customer_id SERIAL PRIMARY KEY,
     customer_name VARCHAR(150) NOT NULL,
     contact_person VARCHAR(100),
@@ -45,9 +98,11 @@ CREATE TABLE customers (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE SEQUENCE order_no_seq;
+-- One sequence drives generated order numbers (ORD-00001, ORD-00002, …).
+CREATE SEQUENCE IF NOT EXISTS order_no_seq;
 
-CREATE TABLE products (
+-- One product row is one customer order.
+CREATE TABLE IF NOT EXISTS products (
     product_id SERIAL PRIMARY KEY,
     customer_id INTEGER NOT NULL REFERENCES customers(customer_id),
     product_name VARCHAR(150) NOT NULL,
@@ -56,46 +111,43 @@ CREATE TABLE products (
     size VARCHAR(20),
     gender VARCHAR(10) NOT NULL DEFAULT 'UNISEX'
         CHECK (gender IN ('MEN','WOMEN','BOYS','GIRLS','KIDS','UNISEX')),
-    order_no VARCHAR(30) NOT NULL UNIQUE
+    order_no VARCHAR(30) NOT NULL
         DEFAULT ('ORD-' || LPAD(nextval('order_no_seq')::text, 5, '0')),
     order_date DATE DEFAULT CURRENT_DATE,
     order_quantity INTEGER NOT NULL CHECK (order_quantity > 0),
     daily_target INTEGER NOT NULL CHECK (daily_target > 0),
-    status VARCHAR(20) DEFAULT 'PENDING' CHECK (status IN ('PENDING','ACTIVE','COMPLETED','ON_HOLD','CANCELLED')),
+    status VARCHAR(20) DEFAULT 'PENDING'
+        CHECK (status IN ('PENDING','ACTIVE','COMPLETED','ON_HOLD','CANCELLED')),
     start_date DATE,
     due_date DATE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-CREATE INDEX ix_products_customer ON products(customer_id);
-CREATE INDEX ix_products_order_date ON products(order_date);
 
-CREATE TABLE production_lines (
-    line_id SERIAL PRIMARY KEY,
+CREATE TABLE IF NOT EXISTS branch_daily_production (
+    record_id SERIAL PRIMARY KEY,
     branch_id INTEGER NOT NULL REFERENCES branches(branch_id),
-    line_name VARCHAR(50) NOT NULL UNIQUE,
-    line_type VARCHAR(20) NOT NULL DEFAULT 'SEWING' CHECK (line_type IN ('SEWING','CUTTING')),
-    status VARCHAR(20) DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','MAINTENANCE','INACTIVE')),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    production_date DATE NOT NULL,
+    daily_target INTEGER DEFAULT 0 CHECK (daily_target >= 0),
+    qty_produced INTEGER DEFAULT 0 CHECK (qty_produced >= 0),
+    entered_by INTEGER REFERENCES users(user_id),
+    entered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_branch_daily UNIQUE (branch_id, production_date)
 );
 
-ALTER TABLE users ADD CONSTRAINT fk_users_line FOREIGN KEY (assigned_line_id) REFERENCES production_lines(line_id);
-
-CREATE TABLE line_assignments (
+CREATE TABLE IF NOT EXISTS line_assignments (
     assignment_id SERIAL PRIMARY KEY,
     line_id INTEGER NOT NULL REFERENCES production_lines(line_id),
     product_id INTEGER NOT NULL REFERENCES products(product_id),
     daily_target INTEGER NOT NULL CHECK (daily_target > 0),
     start_date DATE NOT NULL,
     end_date DATE,
-    status VARCHAR(20) DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','COMPLETED','CANCELLED')),
+    status VARCHAR(20) DEFAULT 'ACTIVE'
+        CHECK (status IN ('ACTIVE','COMPLETED','CANCELLED')),
     created_by INTEGER REFERENCES users(user_id),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-CREATE INDEX ix_assign_line ON line_assignments(line_id);
-CREATE INDEX ix_assign_product ON line_assignments(product_id);
-CREATE UNIQUE INDEX ux_one_active_per_line ON line_assignments (line_id) WHERE status = 'ACTIVE';
 
--- Postgres Trigger to auto-close previous assignment
+-- Starting a new assignment closes the previous ACTIVE one on that line.
 CREATE OR REPLACE FUNCTION close_prev_assignment() RETURNS TRIGGER AS $$
 BEGIN
   UPDATE line_assignments
@@ -106,11 +158,12 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trg_close_prev_assignment ON line_assignments;
 CREATE TRIGGER trg_close_prev_assignment
 BEFORE INSERT ON line_assignments
 FOR EACH ROW EXECUTE FUNCTION close_prev_assignment();
 
-CREATE TABLE hourly_production (
+CREATE TABLE IF NOT EXISTS hourly_production (
     log_id SERIAL PRIMARY KEY,
     assignment_id INTEGER NOT NULL REFERENCES line_assignments(assignment_id),
     line_id INTEGER NOT NULL REFERENCES production_lines(line_id),
@@ -125,21 +178,20 @@ CREATE TABLE hourly_production (
     updated_at TIMESTAMP,
     CONSTRAINT uq_hourly UNIQUE (line_id, production_date, hour_number)
 );
-CREATE INDEX ix_hourly_date ON hourly_production(production_date);
-CREATE INDEX ix_hourly_product ON hourly_production(product_id);
 
-CREATE TABLE daily_workforce (
+CREATE TABLE IF NOT EXISTS daily_workforce (
     record_id SERIAL PRIMARY KEY,
     line_id INTEGER NOT NULL REFERENCES production_lines(line_id),
     production_date DATE NOT NULL,
     workers_required INTEGER CHECK (workers_required >= 0),
     workers_present INTEGER DEFAULT 0 CHECK (workers_present >= 0),
+    notes TEXT,
     recorded_by INTEGER REFERENCES users(user_id),
     recorded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT uq_workforce UNIQUE (line_id, production_date)
 );
 
-CREATE TABLE audit_log (
+CREATE TABLE IF NOT EXISTS audit_log (
     audit_id SERIAL PRIMARY KEY,
     table_name VARCHAR(50) NOT NULL,
     record_id INTEGER NOT NULL,
@@ -150,9 +202,12 @@ CREATE TABLE audit_log (
     changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE process_stage_daily (
+-- Cutting output is recorded per cutting line; other stages leave line_id NULL.
+-- line_key turns NULL into 0 so one unique index covers both cases.
+CREATE TABLE IF NOT EXISTS process_stage_daily (
     record_id SERIAL PRIMARY KEY,
-    stage VARCHAR(20) NOT NULL CHECK (stage IN ('CUTTING','STITCHING','IRONING','PACKING')),
+    stage VARCHAR(20) NOT NULL
+        CHECK (stage IN ('CUTTING','STITCHING','IRONING','PACKING')),
     product_id INTEGER NOT NULL REFERENCES products(product_id),
     line_id INTEGER REFERENCES production_lines(line_id),
     production_date DATE NOT NULL,
@@ -161,12 +216,8 @@ CREATE TABLE process_stage_daily (
     entered_by INTEGER REFERENCES users(user_id),
     entered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-CREATE UNIQUE INDEX ux_stage_daily_line
-    ON process_stage_daily (stage, product_id, production_date, line_key);
-CREATE INDEX ix_stage_date ON process_stage_daily(production_date);
-CREATE INDEX ix_stage_line ON process_stage_daily(line_id);
 
-CREATE TABLE quality_checks (
+CREATE TABLE IF NOT EXISTS quality_checks (
     check_id SERIAL PRIMARY KEY,
     customer_id INTEGER NOT NULL REFERENCES customers(customer_id),
     production_date DATE NOT NULL,
@@ -176,11 +227,116 @@ CREATE TABLE quality_checks (
     entered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT uq_quality_daily UNIQUE (customer_id, production_date)
 );
-CREATE INDEX ix_quality_date ON quality_checks(production_date);
 
--- =====================================================================
--- PostgreSQL REPORTING VIEWS
--- =====================================================================
+-- ---------------------------------------------------------------------
+-- 2. Compatibility block
+-- Adds anything an older database is missing. On a fresh database these
+-- statements are no-ops. Safe to re-run.
+-- ---------------------------------------------------------------------
+
+ALTER TABLE daily_workforce ADD COLUMN IF NOT EXISTS notes TEXT;
+
+ALTER TABLE production_lines
+  ADD COLUMN IF NOT EXISTS line_type VARCHAR(20) NOT NULL DEFAULT 'SEWING';
+
+ALTER TABLE products ADD COLUMN IF NOT EXISTS gender VARCHAR(10);
+ALTER TABLE products ADD COLUMN IF NOT EXISTS order_no VARCHAR(30);
+ALTER TABLE products ADD COLUMN IF NOT EXISTS order_date DATE;
+
+UPDATE products SET gender = 'UNISEX' WHERE gender IS NULL;
+UPDATE products SET order_date = created_at::date WHERE order_date IS NULL;
+UPDATE products
+   SET order_no = 'ORD-' || LPAD(nextval('order_no_seq')::text, 5, '0')
+ WHERE order_no IS NULL;
+
+ALTER TABLE products ALTER COLUMN gender SET DEFAULT 'UNISEX';
+ALTER TABLE products ALTER COLUMN order_date SET DEFAULT CURRENT_DATE;
+ALTER TABLE products
+  ALTER COLUMN order_no
+  SET DEFAULT ('ORD-' || LPAD(nextval('order_no_seq')::text, 5, '0'));
+ALTER TABLE products ALTER COLUMN gender SET NOT NULL;
+ALTER TABLE products ALTER COLUMN order_no SET NOT NULL;
+
+ALTER TABLE process_stage_daily
+  ADD COLUMN IF NOT EXISTS line_id INTEGER REFERENCES production_lines(line_id);
+ALTER TABLE process_stage_daily
+  ADD COLUMN IF NOT EXISTS line_key INTEGER
+  GENERATED ALWAYS AS (COALESCE(line_id, 0)) STORED;
+
+-- Role: LINE_MANAGER replaces SUPERVISOR, which stays accepted for old rows.
+ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
+ALTER TABLE users
+  ADD CONSTRAINT users_role_check
+  CHECK (role IN ('ADMIN','LINE_MANAGER','SUPERVISOR'));
+UPDATE users SET role = 'LINE_MANAGER' WHERE role = 'SUPERVISOR';
+
+ALTER TABLE production_lines DROP CONSTRAINT IF EXISTS production_lines_line_type_check;
+ALTER TABLE production_lines
+  ADD CONSTRAINT production_lines_line_type_check
+  CHECK (line_type IN ('SEWING','CUTTING'));
+
+ALTER TABLE products DROP CONSTRAINT IF EXISTS products_gender_check;
+ALTER TABLE products
+  ADD CONSTRAINT products_gender_check
+  CHECK (gender IN ('MEN','WOMEN','BOYS','GIRLS','KIDS','UNISEX'));
+
+ALTER TABLE process_stage_daily DROP CONSTRAINT IF EXISTS process_stage_daily_stage_check;
+ALTER TABLE process_stage_daily
+  ADD CONSTRAINT process_stage_daily_stage_check
+  CHECK (stage IN ('CUTTING','STITCHING','IRONING','PACKING'));
+
+-- The pre-004 single unique constraint is superseded by ux_stage_daily_line.
+ALTER TABLE process_stage_daily DROP CONSTRAINT IF EXISTS uq_stage_daily;
+
+-- Backfill the multi-line set from the legacy single-line column.
+INSERT INTO user_lines (user_id, line_id)
+SELECT user_id, assigned_line_id
+  FROM users
+ WHERE assigned_line_id IS NOT NULL
+ON CONFLICT (user_id, line_id) DO NOTHING;
+
+-- Keep the order-number sequence in step with existing orders.
+SELECT setval(
+  'order_no_seq',
+  COALESCE(
+    (SELECT MAX(SUBSTRING(order_no FROM 5)::int)
+       FROM products
+      WHERE order_no ~ '^ORD-[0-9]+$'),
+    0
+  ) + 1,
+  false
+);
+
+-- ---------------------------------------------------------------------
+-- 3. Indexes
+-- ---------------------------------------------------------------------
+
+CREATE INDEX IF NOT EXISTS ix_users_assigned_line ON users (assigned_line_id);
+CREATE INDEX IF NOT EXISTS ix_user_lines_line ON user_lines (line_id);
+CREATE INDEX IF NOT EXISTS ix_production_lines_type ON production_lines (line_type);
+
+CREATE INDEX IF NOT EXISTS ix_products_customer ON products (customer_id);
+CREATE INDEX IF NOT EXISTS ix_products_order_date ON products (order_date);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_products_order_no ON products (order_no);
+
+CREATE INDEX IF NOT EXISTS ix_assign_line ON line_assignments (line_id);
+CREATE INDEX IF NOT EXISTS ix_assign_product ON line_assignments (product_id);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_one_active_per_line
+  ON line_assignments (line_id) WHERE status = 'ACTIVE';
+
+CREATE INDEX IF NOT EXISTS ix_hourly_date ON hourly_production (production_date);
+CREATE INDEX IF NOT EXISTS ix_hourly_product ON hourly_production (product_id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_stage_daily_line
+  ON process_stage_daily (stage, product_id, production_date, line_key);
+CREATE INDEX IF NOT EXISTS ix_stage_date ON process_stage_daily (production_date);
+CREATE INDEX IF NOT EXISTS ix_stage_line ON process_stage_daily (line_id);
+
+CREATE INDEX IF NOT EXISTS ix_quality_date ON quality_checks (production_date);
+
+-- ---------------------------------------------------------------------
+-- 4. Reporting views
+-- ---------------------------------------------------------------------
 
 CREATE OR REPLACE VIEW vw_daily_line_summary AS
 SELECT
@@ -284,7 +440,8 @@ SELECT
     dw.workers_present,
     ROUND(dls.total_produced::NUMERIC / NULLIF(dw.workers_present, 0), 2) AS units_per_worker
 FROM vw_daily_line_summary dls
-LEFT JOIN daily_workforce dw ON dw.line_id = dls.line_id AND dw.production_date = dls.production_date;
+LEFT JOIN daily_workforce dw
+       ON dw.line_id = dls.line_id AND dw.production_date = dls.production_date;
 
 CREATE OR REPLACE VIEW vw_branch_daily_summary AS
 SELECT
@@ -303,9 +460,11 @@ SELECT
     SUM(total_produced) AS total_produced,
     SUM(total_target) AS total_target
 FROM (
-    SELECT production_date, total_produced, total_assigned_target AS total_target FROM vw_daily_factory_total
+    SELECT production_date, total_produced, total_assigned_target AS total_target
+      FROM vw_daily_factory_total
     UNION ALL
-    SELECT production_date, qty_produced AS total_produced, daily_target AS total_target FROM branch_daily_production
+    SELECT production_date, qty_produced AS total_produced, daily_target AS total_target
+      FROM branch_daily_production
 ) subquery
 GROUP BY production_date;
 
@@ -383,8 +542,8 @@ FROM products p
 JOIN customers c ON c.customer_id = p.customer_id
 LEFT JOIN (
     SELECT product_id, SUM(qty_produced) AS produced_to_date
-    FROM hourly_production
-    GROUP BY product_id
+      FROM hourly_production
+     GROUP BY product_id
 ) hp ON hp.product_id = p.product_id
 LEFT JOIN LATERAL (
     SELECT
@@ -396,3 +555,24 @@ LEFT JOIN LATERAL (
     WHERE la.product_id = p.product_id
       AND la.status = 'ACTIVE'
 ) al ON true;
+
+-- ---------------------------------------------------------------------
+-- 5. Required reference data
+-- The seeder creates branches and the six production lines on a fresh DB;
+-- this insert covers an existing database that predates cutting lines.
+-- ---------------------------------------------------------------------
+
+INSERT INTO production_lines (branch_id, line_name, status, line_type)
+SELECT b.branch_id, v.line_name, 'ACTIVE', 'CUTTING'
+FROM (
+  SELECT branch_id
+    FROM branches
+   ORDER BY is_main DESC, branch_id
+   LIMIT 1
+) b
+CROSS JOIN (
+  VALUES ('Cutting 1'), ('Cutting 2'), ('Cutting 3')
+) AS v(line_name)
+ON CONFLICT (line_name) DO NOTHING;
+
+COMMIT;

@@ -9,37 +9,60 @@ router.use(authenticateToken, requireRole('ADMIN'));
 
 const GENDERS = ['MEN', 'WOMEN', 'BOYS', 'GIRLS', 'KIDS', 'UNISEX'];
 
-// order_date is a DATE; return it as YYYY-MM-DD so the client never has to
-// deal with a timezone-shifted timestamp.
-const ORDER_COLUMNS = `product_id, order_no, to_char(order_date, 'YYYY-MM-DD') AS order_date,
-  gender, product_name, style_code, color, size, order_quantity, daily_target, status,
-  start_date, due_date, created_at, customer_id, customer_name,
-  produced_to_date, remaining_qty, pct_complete, line_name, line_id, assignment_id`;
+// Read view fields through to_jsonb so a legacy vw_orders without the newer
+// order_no/gender/line columns still returns rows (missing values come back as
+// NULL) instead of failing the whole report.
+const j = (column: string): string => `(to_jsonb(vw_orders)->>'${column}')`;
+
+// order_date is a DATE; the JSON text form is already YYYY-MM-DD, so the client
+// never has to deal with a timezone-shifted timestamp.
+const ORDER_COLUMNS = `product_id,
+  ${j('order_no')} AS order_no,
+  ${j('order_date')} AS order_date,
+  ${j('gender')} AS gender,
+  ${j('product_name')} AS product_name,
+  ${j('style_code')} AS style_code,
+  ${j('color')} AS color,
+  ${j('size')} AS size,
+  (${j('order_quantity')})::int AS order_quantity,
+  (${j('daily_target')})::int AS daily_target,
+  ${j('status')} AS status,
+  ${j('start_date')} AS start_date,
+  ${j('due_date')} AS due_date,
+  ${j('created_at')} AS created_at,
+  (${j('customer_id')})::int AS customer_id,
+  ${j('customer_name')} AS customer_name,
+  (${j('produced_to_date')})::numeric AS produced_to_date,
+  (${j('remaining_qty')})::numeric AS remaining_qty,
+  (${j('pct_complete')})::numeric AS pct_complete,
+  ${j('line_name')} AS line_name,
+  (${j('line_id')})::int AS line_id,
+  (${j('assignment_id')})::int AS assignment_id`;
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
 // Sort whitelist for the orders list (used by the Reports → Orders tab).
 // Values are SQL fragments; the client can never inject SQL via ?sort=.
 const ORDER_SORTABLE: Record<string, string> = {
-  order_no: 'order_no',
-  order_date: 'order_date',
-  customer: 'customer_name',
-  product: 'product_name',
-  gender: 'gender',
-  quantity: 'order_quantity',
-  target: 'daily_target',
-  produced: 'produced_to_date',
-  pct: 'pct_complete',
-  status: 'status',
+  order_no: j('order_no'),
+  order_date: `(${j('order_date')})::date`,
+  customer: j('customer_name'),
+  product: j('product_name'),
+  gender: j('gender'),
+  quantity: `(${j('order_quantity')})::numeric`,
+  target: `(${j('daily_target')})::numeric`,
+  produced: `(${j('produced_to_date')})::numeric`,
+  pct: `(${j('pct_complete')})::numeric`,
+  status: j('status'),
 };
 
 const orderByFor = (sort: unknown, dir: unknown): string => {
   const key = typeof sort === 'string' ? sort : '';
-  const fallback = 'order_date DESC NULLS LAST, order_no DESC';
+  const fallback = `(${j('order_date')})::date DESC NULLS LAST, ${j('order_no')} DESC`;
   const column = ORDER_SORTABLE[key];
   if (!column) return fallback;
   const direction = String(dir).toLowerCase() === 'desc' ? 'DESC' : 'ASC';
-  return `${column} ${direction}, ${fallback}`;
+  return `${column} ${direction} NULLS LAST, ${fallback}`;
 };
 
 // Thrown inside a transaction so the catch block can roll back and answer
@@ -60,11 +83,11 @@ router.get('/', async (req: Request, res: Response) => {
 
     if (status) {
       params.push(status);
-      conditions.push(`status = $${params.length}`);
+      conditions.push(`${j('status')} = $${params.length}`);
     }
     if (customer_id) {
       params.push(customer_id);
-      conditions.push(`customer_id = $${params.length}`);
+      conditions.push(`(${j('customer_id')})::int = $${params.length}`);
     }
     if (line_id) {
       params.push(line_id);
@@ -79,16 +102,16 @@ router.get('/', async (req: Request, res: Response) => {
     }
     if (from) {
       params.push(from);
-      conditions.push(`order_date >= $${params.length}`);
+      conditions.push(`(${j('order_date')})::date >= $${params.length}`);
     }
     if (to) {
       params.push(to);
-      conditions.push(`order_date <= $${params.length}`);
+      conditions.push(`(${j('order_date')})::date <= $${params.length}`);
     }
     if (search) {
       params.push(`%${search}%`);
       conditions.push(
-        `(order_no ILIKE $${params.length} OR product_name ILIKE $${params.length} OR customer_name ILIKE $${params.length})`
+        `(${j('order_no')} ILIKE $${params.length} OR ${j('product_name')} ILIKE $${params.length} OR ${j('customer_name')} ILIKE $${params.length})`
       );
     }
 

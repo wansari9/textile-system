@@ -110,7 +110,7 @@ export default function HourlyGrid({ lines, entries, onUpdate, getTotal, workfor
 
       {/* Grid */}
       <div className="overflow-auto rounded-xl border border-rule shadow-card max-h-[70vh]">
-        <table className="w-full bg-surface-raised text-xs">
+        <table className="w-full min-w-max bg-surface-raised text-xs">
           <thead>
             <tr className="bg-raw-cotton/50 sticky top-0 z-10">
               <th scope="col" className="sticky left-0 z-20 bg-raw-cotton/50 px-2.5 py-2 border-b border-r border-rule text-left text-[11px] font-semibold text-muted uppercase tracking-[0.08em] min-w-[70px] font-sans">Line</th>

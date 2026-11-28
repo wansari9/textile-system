@@ -89,7 +89,7 @@ export default function Customers() {
 
       <Card padding="none">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full min-w-max text-sm">
             <thead>
               <tr className={table.headRow}>
                 <th className="px-5 py-3 font-medium w-8"></th>
@@ -127,7 +127,7 @@ export default function Customers() {
                           ) : ordersMap[customer.customer_id].length === 0 ? (
                             <p className="text-sm text-muted">No orders for this customer.</p>
                           ) : (
-                            <table className="w-full text-sm">
+                            <table className="w-full min-w-max text-sm">
                               <thead>
                                 <tr className="text-[10px] text-muted uppercase tracking-[0.14em] border-b border-rule">
                                   <th className="text-left pb-2 pr-4 font-medium">Order #</th>

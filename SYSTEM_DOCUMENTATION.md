@@ -33,7 +33,7 @@
 
 | I want to… | Go to |
 |---|---|
-| Change the database schema | [`ai_studio_code.sql`](ai_studio_code.sql) (full DDL) + [`server/migrations/`](server/migrations/) |
+| Change the database schema | [`ai_studio_code.sql`](ai_studio_code.sql) — the single setup file (tables, views, triggers, compatibility block) |
 | Add/modify an API endpoint | [`server/src/routes/`](server/src/routes/) (most routes contain logic inline) |
 | Change server startup / mount a route | [`server/src/index.ts`](server/src/index.ts) |
 | Change DB connection | [`server/src/config/db.ts`](server/src/config/db.ts) + [`server/.env`](server/.env) |
@@ -71,14 +71,14 @@ Core concepts:
 - **Quality Checks** — daily pieces checked and faults per customer.
 - **Branch Daily Production** — branch-level target vs produced (separate from line-level hourly data).
 - **Line score** — `min(100, produced ÷ target × 100)` per line and day; blank when no target.
-- **Reports** — SQL views aggregate daily/weekly/company/line/efficiency/quality/order data.
+- **Reports** — SQL views aggregate daily/weekly/monthly/company/line/efficiency/quality/order data.
 
 Two user roles:
 
 | Role | Access |
 |---|---|
 | `ADMIN` | Everything: dashboard, orders, lines, daily production, quality, customers, branches, reports, users |
-| `LINE_MANAGER` | Hourly Entry for their assigned line (legacy `SUPERVISOR` accounts still work) |
+| `LINE_MANAGER` | Hourly Entry for any of their assigned lines (legacy `SUPERVISOR` accounts still work) |
 
 Authentication is enforced on every router. Admin routers require `requireRole('ADMIN')`; hourly production and workforce entry are line-scoped for line managers. See [§7.3 Auth](#73-auth).
 
@@ -124,7 +124,7 @@ Fonts: **Geist** (UI), **Newsreader** (headlines and hero figures) and **Geist M
 
 - No test framework or test files.
 - No ESLint config file (the `lint` script exists but no `eslint.config.*`).
-- No ORM/migrations framework — raw SQL files applied manually.
+- No ORM or migration framework — one idempotent SQL setup file applied manually.
 
 ---
 
@@ -171,7 +171,6 @@ textile-system/
     ├── .env                      # PORT, PG_*, JWT_SECRET
     ├── package.json              # dev / build / start / seed scripts
     ├── tsconfig.json             # strict, CommonJS, src → dist
-    ├── migrations/               # 001–007, applied manually in filename order
     └── src/
         ├── index.ts              # App entry: middleware, /api/test-db, route mounts, listen
         ├── seed.ts               # Admin user, branches, lines, demo customer/product
@@ -244,6 +243,8 @@ erDiagram
     users ||--o{ process_stage_daily : entered_by
     users ||--o{ quality_checks : entered_by
     users ||--o{ line_assignments : created_by
+    users ||--o{ user_lines : owns
+    production_lines ||--o{ user_lines : assigned
     users }o--o| production_lines : assigned_to
 ```
 
@@ -267,9 +268,18 @@ erDiagram
 | `full_name` | VARCHAR(100) | NOT NULL |
 | `email` | VARCHAR(150) | nullable |
 | `role` | VARCHAR(20) | `ADMIN` \| `LINE_MANAGER` (legacy `SUPERVISOR` still accepted) |
-| `assigned_line_id` | INTEGER | FK → `production_lines.line_id` |
+| `assigned_line_id` | INTEGER | FK → `production_lines.line_id`; kept as the manager's **primary** line |
 | `is_active` | SMALLINT | 0/1, default 1 |
 | `created_at` | TIMESTAMP | |
+
+#### `user_lines`
+Join table that lets one line manager own several lines. `user_id` + `line_id` is the primary key; both FKs cascade on delete. It is the authoritative set used for scoping, while `users.assigned_line_id` mirrors the first line for older code. [`ai_studio_code.sql`](ai_studio_code.sql) backfills it from the old single-line column.
+
+| Column | Type | Notes |
+|---|---|---|
+| `user_id` | INTEGER | FK → `users.user_id`, `ON DELETE CASCADE` |
+| `line_id` | INTEGER | FK → `production_lines.line_id`, `ON DELETE CASCADE` |
+| `created_at` | TIMESTAMP | default now |
 
 #### `branch_daily_production`
 Branch-wide target/actual per day. Unique on `(branch_id, production_date)`.
@@ -335,7 +345,7 @@ Indexes: `ix_hourly_date`, `ix_hourly_product`.
 
 #### `daily_workforce`
 `record_id` PK, `line_id` FK, `production_date`, `workers_required` ≥ 0, `workers_present` ≥ 0 (default 0), `recorded_by` FK users, `recorded_at`. Unique `(line_id, production_date)`.
-Migration [`001_add_workforce_notes.sql`](server/migrations/001_add_workforce_notes.sql) adds `notes TEXT`.
+The `notes TEXT` column is part of [`ai_studio_code.sql`](ai_studio_code.sql).
 
 #### `audit_log`
 `audit_id` PK, `table_name`, `record_id`, `action`, `old_value`, `new_value`, `changed_by`, `changed_at`.
@@ -365,21 +375,27 @@ Unique `(customer_id, production_date)`. Index `ix_quality_date`.
 | `vw_quality_summary` | date × customer | `pcs_ok`, `pass_rate_pct` |
 | `vw_orders` | product | order fields + customer, produced-to-date, remaining, `pct_complete`, active line |
 
-> Views are defined in `ai_studio_code.sql`; `006_views.sql` also recreates the order/score views for existing databases. If you change a view, update both and re-apply.
+> All views are defined in [`ai_studio_code.sql`](ai_studio_code.sql), which recreates them on every run. Edit the file and re-apply it to change a view.
 
-### 6.4 Migrations
+### 6.4 Schema setup and upgrades
 
-| File | Change |
+[`ai_studio_code.sql`](ai_studio_code.sql) is the single source of truth for the
+database. It creates every table, index, trigger and view, and folds in what
+used to be eight incremental migrations. It is idempotent and safe to re-run.
+
+How the file is organised:
+
+| Section | Contents |
 |---|---|
-| `server/migrations/001_add_workforce_notes.sql` | `ALTER TABLE daily_workforce ADD COLUMN IF NOT EXISTS notes TEXT;` |
-| `002_roles.sql` | Adds `users.assigned_line_id` FK + index and the `LINE_MANAGER` role value. |
-| `003_line_types.sql` | Adds `production_lines.line_type` and seeds `Cutting 1/2/3`. |
-| `004_stage_lines.sql` | Adds `process_stage_daily.line_id` / `line_key` and the per-line unique index. |
-| `005_orders_gender.sql` | Adds `products.gender`, `order_no`, `order_date`, the `order_no_seq` sequence and backfills existing rows. |
-| `006_views.sql` | Recreates reporting views, adding `vw_line_daily_score` and `vw_orders`. |
-| `007_stage_values.sql` | Widens the stage check to include `STITCHING`. |
+| 1. Core tables | Tables in dependency order (`branches` → `production_lines` → `users` → `user_lines` → … → `quality_checks`). |
+| 2. Compatibility block | `ADD COLUMN IF NOT EXISTS`, constraint swaps, backfills and `user_lines` sync for databases created before a feature existed. |
+| 3. Indexes | All indexes and unique indexes, including `ux_one_active_per_line` and `ux_stage_daily_line`. |
+| 4. Reporting views | Every view, recreated with `CREATE OR REPLACE VIEW`. |
+| 5. Reference data | Seeds `Cutting 1/2/3` when they are missing. |
 
-Migrations are applied manually with `psql -f`. There is no migration runner or tracking table, so every migration must be safe to re-run.
+Apply it with `psql -f` for both a fresh install and an upgrade. There is no
+migration runner or tracking table; the file must stay re-runnable, so new DDL
+belongs in the relevant section with `IF NOT EXISTS` (or an equivalent guard).
 
 ---
 
@@ -421,15 +437,15 @@ Logs on connect; exits the process on idle-client errors.
 1. Look up user by `username`; inactive accounts are rejected with `403`.
 2. Compare password with bcrypt. There is no dev bypass.
 3. Sign JWT with `{ id, role, name, line_id }`, expires in **1 day**, secret `JWT_SECRET`.
-4. Return `{ token, user: { id, username, name, role, line_id } }`.
+4. Return `{ token, user: { id, username, name, role, line_id, line_ids } }`. `line_ids` is the full set of lines a manager may work on; `line_id` is the first one, kept for older clients.
 
 **Middleware** — [`middleware/auth.ts`](server/src/middleware/auth.ts):
 - Reads `Authorization: Bearer <token>`.
 - `401` when the token is missing, malformed, expired, or the user row no longer exists/is inactive.
-- Re-reads the user row and attaches `{ id, username, name, role, line_id }` to `req.user`, so role/line changes take effect immediately.
-- `requireRole('ADMIN')` returns `403` for insufficient role; `isAdmin(user)` is the inline check used for line scoping.
+- Re-reads the user row and attaches `{ id, username, name, role, line_id, line_ids }` to `req.user`, so role/line changes take effect immediately. If `user_lines` does not exist yet (legacy DB), it falls back to `assigned_line_id`.
+- `requireRole('ADMIN')` returns `403` for insufficient role; `isAdmin(user)` is the inline check used for line scoping. `lineIdsFor(user)` and `canAccessLine(user, id)` centralize multi-line checks.
 
-**Guards:** every router is authenticated. Admin routers (`orders`, `products`, `customers`, `branches`, `lines` writes, `stages`, `quality`, `reports`, `users`, `production/daily-report`) require `ADMIN`. Hourly production and workforce entry are open to `ADMIN` and `LINE_MANAGER`, with line managers scoped to their assigned line. `entered_by` / `created_by` always come from the token, never the body.
+**Guards:** every router is authenticated. Admin routers (`orders`, `products`, `customers`, `branches`, `lines` writes, `stages`, `quality`, `reports`, `users`, `production/daily-report`) require `ADMIN`. Hourly production and workforce entry are open to `ADMIN` and `LINE_MANAGER`, with line managers scoped to **any** of their assigned lines. `entered_by` / `created_by` always come from the token, never the body.
 
 ### 7.4 Route organization
 
@@ -544,22 +560,25 @@ All responses are JSON with `success` plus `data` or `message`.
 |---|---|---|---|---|
 | GET | `/reports/daily` | 🔐 | `date` (required), `sort?`, `dir?` | `{ total, by_line[] }`; sort keys `order_no`, `customer`, `product`, `gender`, `line`, `produced`, `defects`, `target`, `pct`, `date` |
 | GET | `/reports/weekly` | 🔐 | `start`, `end` (required), `sort?`, `dir?` | Weekly rows joined with line/product/customer and the same whitelist |
+| GET | `/reports/monthly` | 🔐 | `month=YYYY-MM` (required), `sort?`, `dir?` | One row per month/line/order: produced, faults, monthly target, efficiency; same whitelist |
 | GET | `/reports/overview` | 🔐 | `date?` | One payload for the dashboard: `totals`, `by_customer`, `by_order`, `by_branch`, `by_line`, `by_hour`, `stages`, `quality` |
 | GET | `/reports/customer/:id` | 🔐 | — | Per-product order progress for a customer |
 | GET | `/reports/line/:id` | 🔐 | `from`, `to` (required) | Daily line summary rows |
 | GET | `/reports/efficiency` | 🔐 | `line_id?`, `from?`, `to?` | `vw_line_efficiency` rows |
 | GET | `/reports/company` | 🔐 | `date?` or `from?&to?` | `vw_company_daily_total` rows |
 
-Sorting is server-side and uses a fixed whitelist; an unknown `sort` key falls back to the default order.
+Sorting is server-side and uses a fixed whitelist; an unknown `sort` key falls back to the default order. Date fields (`week_start`, `month`, `production_date`) are returned as plain `YYYY-MM-DD` / `YYYY-MM` text so timezones cannot shift a report into the wrong day or month.
+
+**Legacy-data compatibility:** newer view columns (`order_no`, `gender`, `line_type`, …) are read through `to_jsonb(row)->>'column'`. A database whose views predate those columns still returns rows, with the missing fields as `NULL`; the client renders them as `—` instead of failing the report.
 
 ### 8.11 Users
 
 | Method | Path | Auth | Body / Query | Notes |
 |---|---|---|---|---|
-| GET | `/users` | 🔐 | `?role=&line_id=&all=true` | Active only by default; never returns `password_hash` |
+| GET | `/users` | 🔐 | `?role=&line_id=&all=true` | Active only by default; never returns `password_hash`; each row includes `line_ids[]` |
 | GET | `/users/:id` | 🔐 | — | |
-| POST | `/users` | 🔐 | `{ username*, password*, full_name*, role*, email?, assigned_line_id? }` | `role` is `ADMIN`/`LINE_MANAGER`/`SUPERVISOR`; line-manager roles require an existing `assigned_line_id`; bcrypt cost 10; 409 on duplicate username |
-| PUT | `/users/:id` | 🔐 | `{ full_name?, email?, role?, assigned_line_id?, is_active? }` | Re-validates that a line manager keeps a line |
+| POST | `/users` | 🔐 | `{ username*, password*, full_name*, role*, email?, assigned_line_ids?: number[], assigned_line_id? }` | `role` is `ADMIN`/`LINE_MANAGER`/`SUPERVISOR`; line-manager roles require at least one existing line; `assigned_line_ids` is preferred and `assigned_line_id` is accepted for older clients; bcrypt cost 10; 409 on duplicate username |
+| PUT | `/users/:id` | 🔐 | `{ full_name?, email?, role?, assigned_line_ids?, assigned_line_id?, is_active? }` | Replaces the user's line set and re-validates that a line manager keeps at least one line |
 | PUT | `/users/:id/password` | 🔐 | `{ password }` | Minimum 8 characters |
 | DELETE | `/users/:id` | 🔐 | — | Soft delete |
 
@@ -615,9 +634,9 @@ Guards live in `client/src/auth/guards.tsx`: unauthenticated users go to `/login
 | **Orders** | Order table (order #, gender, qty, target, progress, status); combined New Order modal (existing customer or inline new customer) and edit/cancel | `orders`, `customers`, `products` |
 | **Customers** | Account CRUD; expandable read-only order history | `customers`, `orders` |
 | **Branches** | Date picker; per-branch daily target/produced entry + save; summary table | `branches` |
-| **Reports** | Tabs: Daily / Weekly / All Companies / Orders; Order + Gender columns; sortable headers via the server whitelist; CSV export | `reports`, `orders` |
-| **Users** | User table with role/line; create/edit; password reset via edit; deactivate; line managers must have a line | `users`, `lines` |
-| **Login** | Username/password form; real errors; stores token + user; validates the session with `getMe`; role-based landing | `auth` |
+| **Reports** | Tabs: Daily / Weekly / Monthly / All Companies / Orders; month picker on Monthly; Order + Gender columns; sortable headers via the server whitelist; CSV export | `reports`, `orders` |
+| **Users** | User table with role and all assigned lines; multi-select line checklist for line managers; create/edit; password reset via edit; deactivate | `users`, `lines` |
+| **Login** | Username/password form with a show/hide password toggle; real errors; stores token + user; validates the session with `getMe`; role-based landing | `auth` |
 
 ### 9.5 API client modules (`client/src/api/`)
 
@@ -734,6 +753,14 @@ keeps rendering: `brand`/`brand-dark`/`brand-light`, `factory-night`,
 For the rationale behind these choices and the per-page recipes, see
 [`FRONTEND_DESIGN_GUIDE.md`](FRONTEND_DESIGN_GUIDE.md).
 
+### Responsive tables and numeric readability
+
+- `page.shell` uses `w-full min-w-0` and `p-4 lg:p-6`, so pages shrink with the viewport instead of overflowing.
+- `page.tabs` scrolls horizontally (`overflow-x-auto`) and each tab is `shrink-0 whitespace-nowrap`.
+- `table.wrapper` is `overflow-x-auto`; data tables use `table.base` (`w-full min-w-max`), and cells are `whitespace-nowrap`. Wide tables scroll horizontally rather than clipping figures.
+- Numeric cells use `table.numeric` (`text-right font-mono tabular-nums`) and are formatted with `toLocaleString()`.
+- Two- and three-column form grids collapse to one column below the `sm` breakpoint (`grid-cols-1 sm:grid-cols-2/3`).
+
 ---
 
 ## 11. Business Flows
@@ -752,6 +779,16 @@ Admin opens /lines → Assign Order on a SEWING line
     → COMMIT
 ```
 One active assignment per line is additionally enforced by partial unique index. Cutting lines never take assignments; they record stage output instead.
+
+### 11.1a Line managers with several lines
+
+A line manager account owns a set of lines in `user_lines` (the first is also mirrored to `users.assigned_line_id`). The login token and every authenticated request carry the full `line_ids` set.
+
+- `/users` create/edit accepts `assigned_line_ids: number[]`; the Users page shows a checklist instead of a single dropdown.
+- `GET /lines` returns only the caller's lines; `/lines/:id` and `/lines/:id/current` return `403` for a line outside that set.
+- `POST /production/hourly` and `GET /production/hourly` accept any of the manager's lines; any other `line_id` is `403`.
+- `POST /workforce` and `GET /workforce` are scoped the same way.
+- Admins are never scoped. If `user_lines` is missing on a legacy database, the middleware falls back to `assigned_line_id`.
 
 ### 11.2 Hourly production entry
 
@@ -791,9 +828,10 @@ Cutting upserts on `(stage, product_id, date, line_key)`; other stages upsert on
 - **Dashboard** — a single `GET /reports/overview?date=` returns totals, hourly output, customers, orders, branches, lines and quality. Tabs switch client-side; there is no per-line/per-branch fan-out.
 - **Daily** — factory total + per-line/product breakdown, with Order # and Gender columns.
 - **Weekly** — `vw_weekly_summary` filtered by `week_start`, enriched with line/product/customer/order/gender.
+- **Monthly** — `GET /reports/monthly?month=YYYY-MM` aggregates `vw_daily_line_summary` per month/line/order, with produced, faults, monthly target and efficiency. The month picker is independent of the daily/weekly date.
 - **All Companies** — `vw_company_daily_total`.
 - **Orders** — order-level list with Order #, product, customer, gender, quantity, daily target, produced, progress and status. It opens sorted by `order_no` ascending.
-- Sortable headers send `sort` + `dir`; the server validates them against a whitelist (`order_no`, `customer`, `product`, `gender`, `line`, `produced`, `defects`, `target`, `pct`, `date` for daily/weekly; `order_no`, `order_date`, `customer`, `product`, `gender`, `quantity`, `target`, `produced`, `pct`, `status` for orders). Clicking the same header toggles ascending/descending.
+- Sortable headers send `sort` + `dir`; the server validates them against a whitelist (`order_no`, `customer`, `product`, `gender`, `line`, `produced`, `defects`, `target`, `pct`, `date` for daily/weekly/monthly; `order_no`, `order_date`, `customer`, `product`, `gender`, `quantity`, `target`, `produced`, `pct`, `status` for orders). Clicking the same header toggles ascending/descending.
 - Sort state is stored per tab in `Reports.tsx`, so switching tabs or changing the report date does not reset it. The Orders tab keeps its order-number sort across date changes even though the order list itself is not date-filtered.
 - CSV export is client-side in `ReportTable`.
 
@@ -826,8 +864,8 @@ Node ≥ 18, npm ≥ 9, PostgreSQL ≥ 14.
 ```bash
 psql -U postgres -c "CREATE DATABASE textile_db;"
 psql -U postgres -d textile_db -f ai_studio_code.sql
-psql -U postgres -d textile_db -f server/migrations/001_add_workforce_notes.sql
-# … then 002 through 007 in filename order. Re-running is safe.
+# One idempotent file: tables, compatibility block, indexes and views.
+# Re-running it upgrades an existing database without deleting data.
 ```
 
 ### Server
@@ -867,8 +905,8 @@ Alternative: set `VITE_API_BASE_URL=/api` to use the Vite proxy (recommended if 
 
 ### Phase 9 verification (2026-11-26)
 
-- **Scratch database:** created `textile_scratch`, applied `ai_studio_code.sql`, then migrations `001`–`007` in order, then ran the seed. Result: 12 tables, 11 views, `Cutting 1/2/3` and the demo admin/manager/order present.
-- **Real database:** re-applied migrations `001`–`007` to `textile_db`. All statements are idempotent; result: 12 tables, 11 views, order/line/stage columns present.
+- **Scratch database:** created `textile_setup_test`, applied the consolidated `ai_studio_code.sql` twice (fresh + re-run), then ran the seed. Result: 13 tables, 11 views, `Cutting 1/2/3` and the demo admin/manager/order present.
+- **Real database:** the same file was applied to `textile_db`; all statements are idempotent, and the order/line/stage/`user_lines` columns are present.
 - **Builds:** `npm run build` passed in both `server/` (tsc) and `client/` (tsc + Vite).
 - **API smoke test:** admin login; every page's primary data source; line-manager login; manager sees only its own line and receives `403` for another line; manager hourly write is forced onto its own line; new-customer order creation; sewing-line assignment; hourly entry; cutting on all three cutting lines; ironing, packing and quality; line score equals capped attainment; daily/weekly/orders sorting by order number in both directions and daily sorting by total faults in both directions.
 - **UI smoke test:** admin sidebar navigation across Dashboard, Orders, Production Lines, Daily Production, Quality, Customers, Branches, Reports, Users and Hourly Entry; Reports → Orders tab sorts by Order # ascending/descending and keeps the direction after a date change; line manager lands on `/entry`, sees only the Hourly Entry nav item, and is redirected away from `/orders`.
@@ -894,9 +932,9 @@ Alternative: set `VITE_API_BASE_URL=/api` to use the Vite proxy (recommended if 
 5. Use `Card`, `Button`, `Input`, `Badge`, `Modal`, `useToast` from `components/ui`.
 
 ### Add a database table or column
-1. For a fresh DB, edit `ai_studio_code.sql`.
-2. For an existing DB, add `server/migrations/NNN_description.sql` with idempotent SQL (`IF NOT EXISTS` where possible).
-3. Apply manually with `psql`.
+1. Edit [`ai_studio_code.sql`](ai_studio_code.sql): add the table to section 1, or the column to the compatibility block with `ADD COLUMN IF NOT EXISTS`.
+2. Add any new index to section 3 and views to section 4.
+3. Apply the file with `psql -U postgres -d textile_db -f ai_studio_code.sql`; it is idempotent.
 4. Update this document's schema section and the file index.
 
 ### Change status colors / design tokens
@@ -962,7 +1000,7 @@ Line-scoped routers should compare `req.user.line_id` instead of trusting a body
 
 | File | Lines | Purpose |
 |---|---|---|
-| `ai_studio_code.sql` | 398 | Full schema: 12 tables, indexes, assignment trigger, 11 views |
+| `ai_studio_code.sql` | 578 | Single database setup file: 13 tables, indexes, assignment trigger, 11 views, compatibility/backfill block |
 | `SETUP.md` | 333 | Install/run guide, API overview, troubleshooting |
 | `FRONTEND_DESIGN_GUIDE.md` | 207 | Design philosophy and page recipes; points to `design.ts` for all values |
 | `SYSTEM_DOCUMENTATION.md` | — | This document |
@@ -977,31 +1015,24 @@ Line-scoped routers should compare `req.user.line_id` instead of trusting a body
 | `server/package.json` | 35 | Scripts + deps |
 | `server/tsconfig.json` | 13 | Strict CommonJS build `src → dist` |
 | `server/.env` | — | Local env (PORT, PG_*, JWT_SECRET) |
-| `server/migrations/001_add_workforce_notes.sql` | 2 | Adds `daily_workforce.notes` |
-| `server/migrations/002_roles.sql` | 16 | Adds `users.assigned_line_id` + index and `LINE_MANAGER` |
-| `server/migrations/003_line_types.sql` | 20 | Adds `production_lines.line_type` and seeds Cutting 1/2/3 |
-| `server/migrations/004_stage_lines.sql` | 21 | Adds cutting-line columns and per-line uniqueness |
-| `server/migrations/005_orders_gender.sql` | 49 | Adds order number/date/gender to products |
-| `server/migrations/006_views.sql` | 120 | Recreates reporting views and adds score/order views |
-| `server/migrations/007_stage_values.sql` | 9 | Adds `STITCHING` to the stage check |
 | `server/src/index.ts` | 48 | Express entry, `/api/test-db`, route mounts |
-| `server/src/seed.ts` | 115 | Seeds admin, branches, 3 lines, demo customer/product |
+| `server/src/seed.ts` | 127 | Seeds admin/manager, branches, 3 lines, demo customer/product; syncs `user_lines` |
 | `server/src/config/db.ts` | 28 | `pg.Pool` + `query()` helper |
-| `server/src/middleware/auth.ts` | 87 | JWT Bearer verification, role/line guards |
-| `server/src/controllers/authController.ts` | 58 | Login: lookup, bcrypt, JWT |
+| `server/src/middleware/auth.ts` | 133 | JWT verification, user re-read, multi-line guards |
+| `server/src/controllers/authController.ts` | 58 | Login: lookup, bcrypt, JWT with `line_ids` |
 | `server/src/controllers/productionController.ts` | 129 | Hourly upsert, hourly fetch, daily report |
 | `server/src/routes/auth.ts` | 14 | `POST /login`, `GET /me` |
 | `server/src/routes/production.ts` | 15 | Hourly + daily-report routes |
 | `server/src/routes/customers.ts` | 104 | Customer CRUD + soft delete |
 | `server/src/routes/products.ts` | 180 | Product CRUD, by-customer, progress, cancel; order fields |
-| `server/src/routes/orders.ts` | 263 | Combined order creation, list/get, whitelisted sorting |
+| `server/src/routes/orders.ts` | 286 | Combined order creation, list/get, legacy-safe whitelisted sorting |
 | `server/src/routes/lines.ts` | 282 | Line CRUD, assign, current/history, type filter + score |
 | `server/src/routes/workforce.ts` | 76 | Workforce upsert + query |
 | `server/src/routes/branches.ts` | 185 | Branch CRUD, daily production, summary |
 | `server/src/routes/stages.ts` | 161 | Stage upsert/list/summary; cutting `line_id` |
 | `server/src/routes/quality.ts` | 76 | Quality upsert + view query |
-| `server/src/routes/reports.ts` | 358 | Daily, weekly, overview, customer, line, efficiency, company + sort whitelist |
-| `server/src/routes/users.ts` | 197 | User CRUD, password reset, line-manager validation, soft delete |
+| `server/src/routes/reports.ts` | 441 | Daily, weekly, monthly, overview, customer, line, efficiency, company + legacy-safe sort whitelist |
+| `server/src/routes/users.ts` | 279 | User CRUD, multi-line assignment, password reset, soft delete |
 
 ### Client
 
@@ -1015,7 +1046,7 @@ Line-scoped routers should compare `req.user.line_id` instead of trusting a body
 | `client/src/main.tsx` | 10 | React root |
 | `client/src/App.tsx` | 56 | Router, guards, routes, `/products` redirect, ToastProvider |
 | `client/src/domain.ts` | 75 | Shared roles, genders, line types, stage tabs and labels |
-| `client/src/design.ts` | 464 | ← Single source of truth: palette, type, thresholds, tones, chart, component presets, generated CSS |
+| `client/src/design.ts` | 520 | ← Single source of truth: palette, type, thresholds, tones, chart, responsive component presets, generated CSS |
 | `client/src/index.css` | 7 | Intentionally empty stub; replaced at build time by `design.ts` |
 | `client/src/lib/client.ts` | 36 | Axios instance, token interceptor, 401 session cleanup |
 | `client/src/lib/session.ts` | 30 | Read/write/clear the stored session |
@@ -1029,13 +1060,13 @@ Line-scoped routers should compare `req.user.line_id` instead of trusting a body
 | `client/src/api/production.ts` | 19 | Hourly save/fetch |
 | `client/src/api/products.ts` | 42 | Product CRUD + by-customer |
 | `client/src/api/quality.ts` | 16 | Quality save/fetch |
-| `client/src/api/reports.ts` | 65 | All report endpoints |
+| `client/src/api/reports.ts` | 77 | All report endpoints, including monthly |
 | `client/src/api/stages.ts` | 21 | Stage save/list/summary |
-| `client/src/api/users.ts` | 33 | User CRUD + password reset |
+| `client/src/api/users.ts` | 35 | User CRUD + multi-line assignment + password reset |
 | `client/src/api/workforce.ts` | 17 | Workforce save/fetch |
 | `client/src/components/HourlyGrid.tsx` | 244 | 12-hour grid, tabs, keyboard nav, totals |
 | `client/src/components/QualityForm.tsx` | 103 | Shared quality tally form |
-| `client/src/components/ReportTable.tsx` | 126 | Table + CSV export + sortable headers |
+| `client/src/components/ReportTable.tsx` | 127 | Table + CSV export + sortable headers + `—` for missing values |
 | `client/src/components/production/ProductionBar.tsx` | 58 | Progress bar + status color util |
 | `client/src/components/production/StatusBadge.tsx` | 23 | Percentage badge |
 | `client/src/components/ui/index.ts` | 9 | Barrel export |
@@ -1049,14 +1080,14 @@ Line-scoped routers should compare `req.user.line_id` instead of trusting a body
 | `client/src/components/ui/Spinner.tsx` | 27 | SVG spinner |
 | `client/src/components/ui/Skeleton.tsx` | 50 | Text/circle/rect + table/card presets |
 | `client/src/components/ui/Toast.tsx` | 75 | Toast context/provider, 4 types, 4s auto-dismiss |
-| `client/src/pages/auth/Login.tsx` | 149 | Brand panel + login form + role landing |
+| `client/src/pages/auth/Login.tsx` | 163 | Brand panel + login form with show/hide password + role landing |
 | `client/src/pages/admin/Dashboard.tsx` | 715 | Overview hero + tabs: Customers/Orders/Branches/Lines |
 | `client/src/pages/admin/Lines.tsx` | 295 | Sewing/cutting tables, create/edit, assign modal with score |
 | `client/src/pages/admin/Orders.tsx` | 439 | Order table + combined customer/order modal |
 | `client/src/pages/admin/Customers.tsx` | 201 | Account CRUD + read-only order history |
 | `client/src/pages/admin/Branches.tsx` | 142 | Branch daily entry + summary table |
-| `client/src/pages/admin/Reports.tsx` | 223 | Daily/Weekly/Company/Orders tabs + sorting |
-| `client/src/pages/admin/Users.tsx` | 157 | User table + create/edit/reset/deactivate |
+| `client/src/pages/admin/Reports.tsx` | 263 | Daily/Weekly/Monthly/Company/Orders tabs + sorting |
+| `client/src/pages/admin/Users.tsx` | 218 | User table + multi-line assignment + create/edit/reset/deactivate |
 | `client/src/pages/supervisor/HourlyEntry.tsx` | 186 | Loads lines/workforce, saves all entries |
 | `client/src/pages/supervisor/ProcessStages.tsx` | 406 | Five-tab daily production entry |
 | `client/src/pages/supervisor/Quality.tsx` | 30 | QC page wrapping `QualityForm` |

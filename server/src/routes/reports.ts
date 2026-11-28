@@ -7,37 +7,58 @@ const router = Router();
 // Reports are an admin-only area.
 router.use(authenticateToken, requireRole('ADMIN'));
 
+type ReportKind = 'daily' | 'weekly' | 'monthly';
+
 // Strict whitelist of sortable report fields. Values are SQL expressions, so
 // the client can never inject SQL through ?sort=.
-const SORTABLE: Record<'daily' | 'weekly', Record<string, string>> = {
+//
+// Every column is read through to_jsonb() so an older database that has not
+// received a newer view column (order_no, gender, line_type, …) still renders
+// the report instead of failing with "column does not exist".
+const jsonText = (alias: string, column: string): string => `(to_jsonb(${alias})->>'${column}')`;
+const jsonNumber = (alias: string, column: string): string => `(to_jsonb(${alias})->>'${column}')::numeric`;
+
+const SORTABLE: Record<ReportKind, Record<string, string>> = {
   daily: {
-    order_no: 'order_no',
-    customer: 'customer_name',
-    product: 'product_name',
-    gender: 'gender',
-    line: 'line_name',
-    produced: 'total_produced',
-    defects: 'total_defect',
-    target: 'daily_target',
-    pct: 'pct_of_target',
-    date: 'production_date',
+    order_no: jsonText('dls', 'order_no'),
+    customer: jsonText('dls', 'customer_name'),
+    product: jsonText('dls', 'product_name'),
+    gender: jsonText('dls', 'gender'),
+    line: jsonText('dls', 'line_name'),
+    produced: jsonNumber('dls', 'total_produced'),
+    defects: jsonNumber('dls', 'total_defect'),
+    target: jsonNumber('dls', 'daily_target'),
+    pct: jsonNumber('dls', 'pct_of_target'),
+    date: `${jsonText('dls', 'production_date')}::date`,
   },
   weekly: {
-    order_no: 'ws.order_no',
+    order_no: `COALESCE(${jsonText('ws', 'order_no')}, ${jsonText('p', 'order_no')})`,
     customer: 'c.customer_name',
     product: 'p.product_name',
-    gender: 'ws.gender',
+    gender: `COALESCE(${jsonText('ws', 'gender')}, ${jsonText('p', 'gender')})`,
     line: 'pl.line_name',
-    produced: 'ws.total_produced',
-    defects: 'ws.total_defect',
-    target: 'ws.total_target',
-    pct: 'ROUND((ws.total_produced::NUMERIC / NULLIF(ws.total_target, 0)) * 100, 1)',
-    date: 'ws.week_start',
+    produced: jsonNumber('ws', 'total_produced'),
+    defects: jsonNumber('ws', 'total_defect'),
+    target: jsonNumber('ws', 'total_target'),
+    pct: `ROUND((${jsonNumber('ws', 'total_produced')} / NULLIF(${jsonNumber('ws', 'total_target')}, 0)) * 100, 1)`,
+    date: `${jsonText('ws', 'week_start')}::date`,
+  },
+  monthly: {
+    order_no: jsonText('dls', 'order_no'),
+    customer: 'c.customer_name',
+    product: 'p.product_name',
+    gender: jsonText('dls', 'gender'),
+    line: 'pl.line_name',
+    produced: 'SUM(dls.total_produced)',
+    defects: 'SUM(dls.total_defect)',
+    target: 'SUM(dls.daily_target)',
+    pct: `ROUND((SUM(dls.total_produced)::NUMERIC / NULLIF(SUM(dls.daily_target), 0)) * 100, 1)`,
+    date: `to_char(date_trunc('month', dls.production_date), 'YYYY-MM')`,
   },
 };
 
 const orderByFor = (
-  report: 'daily' | 'weekly',
+  report: ReportKind,
   sort: unknown,
   dir: unknown,
   fallback: string
@@ -46,7 +67,7 @@ const orderByFor = (
   const column = SORTABLE[report][key];
   if (!column) return fallback;
   const direction = String(dir).toLowerCase() === 'desc' ? 'DESC' : 'ASC';
-  return `${column} ${direction}, ${fallback}`;
+  return `${column} ${direction} NULLS LAST, ${fallback}`;
 };
 
 const localISODate = (): string => {
@@ -66,7 +87,8 @@ router.get('/daily', async (req: Request, res: Response) => {
     const [totalResult, breakdownResult] = await Promise.all([
       pool.query(`SELECT * FROM vw_daily_factory_total WHERE production_date = $1`, [date]),
       pool.query(
-        `SELECT * FROM vw_daily_line_summary WHERE production_date = $1 ORDER BY ${orderBy}`,
+        `SELECT dls.* FROM vw_daily_line_summary dls
+         WHERE dls.production_date = $1 ORDER BY ${orderBy}`,
         [date]
       ),
     ]);
@@ -92,14 +114,19 @@ router.get('/weekly', async (req: Request, res: Response) => {
   try {
     const orderBy = orderByFor('weekly', sort, dir, 'ws.week_start DESC, pl.line_name ASC');
     const result = await pool.query(
-      `SELECT ws.week_start, ws.line_id, pl.line_name, pl.line_type, ws.product_id, p.product_name,
-              c.customer_name, ws.order_no, ws.gender,
-              ws.total_produced, ws.total_defect, ws.total_target
+      `SELECT to_char(${jsonText('ws', 'week_start')}::date, 'YYYY-MM-DD') AS week_start,
+              ws.line_id, pl.line_name, ${jsonText('pl', 'line_type')} AS line_type,
+              ws.product_id, p.product_name, c.customer_name,
+              COALESCE(${jsonText('ws', 'order_no')}, ${jsonText('p', 'order_no')}) AS order_no,
+              COALESCE(${jsonText('ws', 'gender')}, ${jsonText('p', 'gender')}) AS gender,
+              ${jsonNumber('ws', 'total_produced')}::int AS total_produced,
+              ${jsonNumber('ws', 'total_defect')}::int AS total_defect,
+              ${jsonNumber('ws', 'total_target')}::int AS total_target
        FROM vw_weekly_summary ws
        JOIN production_lines pl ON pl.line_id = ws.line_id
        JOIN products p ON p.product_id = ws.product_id
        JOIN customers c ON c.customer_id = p.customer_id
-       WHERE ws.week_start BETWEEN $1 AND $2
+       WHERE ${jsonText('ws', 'week_start')}::date BETWEEN $1 AND $2
        ORDER BY ${orderBy}`,
       [start, end]
     );
@@ -107,6 +134,51 @@ router.get('/weekly', async (req: Request, res: Response) => {
   } catch (error: any) {
     console.error('Weekly report error:', error);
     res.status(500).json({ success: false, message: 'Failed to generate weekly report' });
+  }
+});
+
+// GET /api/reports/monthly?month=YYYY-MM[&sort=&dir=]
+// One row per line/order for the month. Legacy-safe: missing order_no/gender/
+// line_type columns come back as NULL rather than breaking the query.
+router.get('/monthly', async (req: Request, res: Response) => {
+  const { month, sort, dir } = req.query;
+  if (typeof month !== 'string' || !/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {
+    return res.status(400).json({ success: false, message: 'month query param must be YYYY-MM' });
+  }
+
+  const [year, monthNumber] = month.split('-').map(Number);
+  const start = `${month}-01`;
+  const nextMonth = new Date(Date.UTC(year, monthNumber, 1));
+  const end = nextMonth.toISOString().slice(0, 10);
+
+  try {
+    const orderBy = orderByFor('monthly', sort, dir, 'pl.line_name ASC, p.product_name ASC');
+    const result = await pool.query(
+      `SELECT to_char(date_trunc('month', dls.production_date), 'YYYY-MM') AS month,
+              dls.line_id, pl.line_name, ${jsonText('pl', 'line_type')} AS line_type,
+              dls.product_id, p.product_name, c.customer_name,
+              ${jsonText('dls', 'order_no')} AS order_no,
+              ${jsonText('dls', 'gender')} AS gender,
+              SUM(dls.total_produced)::int AS total_produced,
+              SUM(dls.total_defect)::int AS total_defect,
+              SUM(dls.daily_target)::int AS total_target,
+              ROUND((SUM(dls.total_produced)::NUMERIC / NULLIF(SUM(dls.daily_target), 0)) * 100, 1)::float8 AS pct_of_target
+       FROM vw_daily_line_summary dls
+       JOIN production_lines pl ON pl.line_id = dls.line_id
+       JOIN products p ON p.product_id = dls.product_id
+       JOIN customers c ON c.customer_id = p.customer_id
+       WHERE dls.production_date >= $1 AND dls.production_date < $2
+       GROUP BY to_char(date_trunc('month', dls.production_date), 'YYYY-MM'),
+                dls.line_id, pl.line_name, ${jsonText('pl', 'line_type')},
+                dls.product_id, p.product_name, c.customer_name,
+                ${jsonText('dls', 'order_no')}, ${jsonText('dls', 'gender')}
+       ORDER BY ${orderBy}`,
+      [start, end]
+    );
+    res.json({ success: true, data: result.rows });
+  } catch (error: any) {
+    console.error('Monthly report error:', error);
+    res.status(500).json({ success: false, message: 'Failed to generate monthly report' });
   }
 });
 
@@ -145,19 +217,24 @@ router.get('/overview', async (req: Request, res: Response) => {
       ),
 
       pool.query(
-        `SELECT dls.product_id, p.order_no, to_char(p.order_date, 'YYYY-MM-DD') AS order_date,
-                dls.customer_name, dls.gender, dls.product_name,
+        `SELECT dls.product_id,
+                ${jsonText('p', 'order_no')} AS order_no,
+                ${jsonText('p', 'order_date')} AS order_date,
+                dls.customer_name,
+                ${jsonText('dls', 'gender')} AS gender,
+                dls.product_name,
                 STRING_AGG(DISTINCT dls.line_name, ', ' ORDER BY dls.line_name) AS line_name,
                 SUM(dls.total_produced)::int AS produced,
                 SUM(dls.daily_target)::int AS target,
                 SUM(dls.total_defect)::int AS defects,
                 ROUND((SUM(dls.total_produced)::NUMERIC / NULLIF(SUM(dls.daily_target), 0)) * 100, 1)::float8 AS pct_of_target,
-                p.status
+                ${jsonText('p', 'status')} AS status
          FROM vw_daily_line_summary dls
          JOIN products p ON p.product_id = dls.product_id
          WHERE dls.production_date = $1
-         GROUP BY dls.product_id, p.order_no, p.order_date, dls.customer_name, dls.gender, dls.product_name, p.status
-         ORDER BY p.order_no`,
+         GROUP BY dls.product_id, ${jsonText('p', 'order_no')}, ${jsonText('p', 'order_date')},
+                  dls.customer_name, ${jsonText('dls', 'gender')}, dls.product_name, ${jsonText('p', 'status')}
+         ORDER BY ${jsonText('p', 'order_no')}`,
         [date]
       ),
 
@@ -175,12 +252,14 @@ router.get('/overview', async (req: Request, res: Response) => {
       ),
 
       pool.query(
-        `SELECT pl.line_id, pl.line_name, pl.line_type, pl.status,
+        `SELECT pl.line_id, pl.line_name, ${jsonText('pl', 'line_type')} AS line_type, pl.status,
                 COALESCE(s.total_produced, 0)::int AS produced,
                 COALESCE(s.daily_target, 0)::int AS target,
                 s.score::float8 AS score,
                 la.daily_target AS assigned_target,
-                p.product_id, p.product_name, p.order_no, p.gender,
+                p.product_id, p.product_name,
+                ${jsonText('p', 'order_no')} AS order_no,
+                ${jsonText('p', 'gender')} AS gender,
                 c.customer_id, c.customer_name,
                 COALESCE(dw.workers_present, 0)::int AS workers_present,
                 COALESCE(dw.workers_required, 0)::int AS workers_required
@@ -250,13 +329,14 @@ router.get('/overview', async (req: Request, res: Response) => {
 
 // GET /api/reports/customer/:id
 // Order progress for every product belonging to this customer.
-// (Built directly off products+hourly_production rather than vw_product_progress,
-//  since that view doesn't expose customer_id — only customer_name.)
 router.get('/customer/:id', async (req: Request, res: Response) => {
   try {
     const result = await pool.query(
       `SELECT p.product_id, p.product_name, p.style_code, p.color, p.size,
-              p.order_quantity, p.status, p.order_no, p.gender, p.order_date,
+              p.order_quantity, p.status,
+              ${jsonText('p', 'order_no')} AS order_no,
+              ${jsonText('p', 'gender')} AS gender,
+              ${jsonText('p', 'order_date')} AS order_date,
               COALESCE(SUM(hp.qty_produced), 0) AS total_produced_to_date,
               p.order_quantity - COALESCE(SUM(hp.qty_produced), 0) AS remaining_qty,
               ROUND((COALESCE(SUM(hp.qty_produced), 0)::NUMERIC / p.order_quantity) * 100, 1) AS pct_complete
@@ -264,7 +344,8 @@ router.get('/customer/:id', async (req: Request, res: Response) => {
        LEFT JOIN hourly_production hp ON hp.product_id = p.product_id
        WHERE p.customer_id = $1
        GROUP BY p.product_id, p.product_name, p.style_code, p.color, p.size,
-                p.order_quantity, p.status, p.order_no, p.gender, p.order_date
+                p.order_quantity, p.status, ${jsonText('p', 'order_no')},
+                ${jsonText('p', 'gender')}, ${jsonText('p', 'order_date')}
        ORDER BY p.created_at DESC`,
       [req.params.id]
     );
@@ -345,7 +426,9 @@ router.get('/company', async (req: Request, res: Response) => {
 
     const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
     const result = await pool.query(
-      `SELECT * FROM vw_company_daily_total ${whereClause} ORDER BY production_date DESC`,
+      `SELECT to_char(production_date, 'YYYY-MM-DD') AS production_date,
+              total_produced, total_target
+       FROM vw_company_daily_total ${whereClause} ORDER BY production_date DESC`,
       params
     );
     res.json({ success: true, data: result.rows });

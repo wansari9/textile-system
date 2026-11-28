@@ -1,13 +1,13 @@
 import { useState, useEffect } from 'react';
 import ReportTable from '../../components/ReportTable';
-import { getDailyReport, getWeeklyReport, getCompanyReport, type ReportSort, type SortDirection } from '../../api/reports';
+import { getDailyReport, getWeeklyReport, getMonthlyReport, getCompanyReport, type ReportSort, type SortDirection } from '../../api/reports';
 import { getOrders } from '../../api/orders';
 import { Card } from '../../components/ui';
 import { page } from '../../design';
 import { GENDER_LABELS } from '../../domain';
 import { toISODate } from '../../lib/date';
 
-type Tab = 'daily' | 'weekly' | 'company' | 'orders';
+type Tab = 'daily' | 'weekly' | 'monthly' | 'company' | 'orders';
 
 interface SortState {
   key: string;
@@ -17,15 +17,19 @@ interface SortState {
 const genderLabel = (value: any) =>
   GENDER_LABELS[value as keyof typeof GENDER_LABELS] ?? value ?? '—';
 
+const dateOnly = (value: any) => (value ? String(value).slice(0, 10) : '—');
+
 export default function Reports() {
   const [tab, setTab] = useState<Tab>('daily');
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [selectedDate, setSelectedDate] = useState(toISODate(new Date()));
+  const [selectedMonth, setSelectedMonth] = useState(toISODate(new Date()).slice(0, 7));
   // Kept per tab so a sort choice survives switching tab or changing the date.
   const [sorts, setSorts] = useState<Record<Tab, SortState | null>>({
     daily: null,
     weekly: null,
+    monthly: null,
     company: null,
     orders: { key: 'order_no', dir: 'asc' },
   });
@@ -58,6 +62,12 @@ export default function Reports() {
         (sort?.key as ReportSort | undefined),
         sort?.dir
       );
+    } else if (tab === 'monthly') {
+      request = getMonthlyReport(
+        selectedMonth,
+        (sort?.key as ReportSort | undefined),
+        sort?.dir
+      );
     } else if (tab === 'orders') {
       request = getOrders({ sort: sort?.key, dir: sort?.dir });
     } else {
@@ -68,7 +78,7 @@ export default function Reports() {
       .then(res => res.success && setData(res.data))
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [tab, selectedDate, sort]);
+  }, [tab, selectedDate, selectedMonth, sort]);
 
   const handleSort = (key: string) => {
     setSorts(prev => {
@@ -81,6 +91,7 @@ export default function Reports() {
   const tabs: { key: Tab; label: string }[] = [
     { key: 'daily', label: 'Daily Report' },
     { key: 'weekly', label: 'Weekly Report' },
+    { key: 'monthly', label: 'Monthly Report' },
     { key: 'company', label: 'All Companies' },
     { key: 'orders', label: 'Orders' },
   ];
@@ -95,7 +106,7 @@ export default function Reports() {
       return (
         <div className="space-y-6">
           {total && (
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               <div className="bg-canvas p-4 rounded-lg border border-rule">
                 <p className="text-sm text-muted">Total Produced</p>
                 <p className="text-2xl font-serif text-ink">{total.total_produced?.toLocaleString()}</p>
@@ -153,6 +164,29 @@ export default function Reports() {
       );
     }
 
+    if (tab === 'monthly') {
+      return (
+        <ReportTable
+          title="Monthly Summary"
+          sort={sort}
+          onSort={handleSort}
+          columns={[
+            { header: 'Month', accessor: 'month', sortKey: 'date' },
+            { header: 'Line', accessor: 'line_name', sortKey: 'line' },
+            { header: 'Order #', accessor: 'order_no', sortKey: 'order_no' },
+            { header: 'Product', accessor: 'product_name', sortKey: 'product' },
+            { header: 'Customer', accessor: 'customer_name', sortKey: 'customer' },
+            { header: 'Gender', accessor: 'gender', sortKey: 'gender', format: genderLabel },
+            { header: 'Total Produced', accessor: 'total_produced', sortKey: 'produced' },
+            { header: 'Total Faults', accessor: 'total_defect', sortKey: 'defects' },
+            { header: 'Monthly Target', accessor: 'total_target', sortKey: 'target' },
+            { header: 'Efficiency Rate', accessor: 'pct_of_target', sortKey: 'pct' },
+          ]}
+          data={Array.isArray(data) ? data : []}
+        />
+      );
+    }
+
     if (tab === 'orders') {
       return (
         <ReportTable
@@ -180,7 +214,7 @@ export default function Reports() {
       <ReportTable
         title="Company Daily Total"
         columns={[
-          { header: 'Date', accessor: 'production_date' },
+          { header: 'Date', accessor: 'production_date', format: dateOnly },
           { header: 'Total Produced', accessor: 'total_produced' },
           { header: 'Total Target', accessor: 'total_target' },
         ]}
@@ -194,12 +228,18 @@ export default function Reports() {
       <div className={page.header}>
         <div>
           <h1 className={page.title}>Production Reports</h1>
-          <p className={page.subtitle}>View daily, weekly, company-wide and order-level reports</p>
+          <p className={page.subtitle}>View daily, weekly, monthly, company-wide and order-level reports</p>
         </div>
         <div className="flex items-center gap-2">
-          <input type="date" className={page.dateInput}
-            value={selectedDate}
-            onChange={e => setSelectedDate(e.target.value)} />
+          {tab === 'monthly' ? (
+            <input type="month" className={page.dateInput}
+              value={selectedMonth}
+              onChange={e => setSelectedMonth(e.target.value)} />
+          ) : (
+            <input type="date" className={page.dateInput}
+              value={selectedDate}
+              onChange={e => setSelectedDate(e.target.value)} />
+          )}
         </div>
       </div>
 

@@ -39,6 +39,20 @@ export const getWeeklyReport = async (
   return data;
 };
 
+export const getMonthlyReport = async (
+  month: string,
+  sort?: ReportSort,
+  dir?: SortDirection
+) => {
+  const params: Record<string, string> = { month };
+  if (sort) {
+    params.sort = sort;
+    params.dir = dir ?? 'asc';
+  }
+  const { data } = await apiClient.get('/reports/monthly', { params });
+  return data;
+};
+
 export const getOverviewReport = async (date: string) => {
   const { data } = await apiClient.get('/reports/overview', { params: { date } });
   return data;

@@ -118,7 +118,7 @@ export default function Lines() {
 
   const renderLineTable = (rows: any[], emptyMessage: string) => (
     <div className="overflow-x-auto">
-      <table className="w-full text-sm">
+      <table className="w-full min-w-max text-sm">
         <thead>
           <tr className={table.headRow}>
             <th className="px-5 py-3 font-medium">Line</th>
@@ -265,7 +265,7 @@ export default function Lines() {
           placeholder="Select an order" />
 
         {selectedOrder && (
-          <div className="grid grid-cols-2 gap-3 rounded-xl border border-rule bg-canvas/60 p-3 text-sm">
+          <div className="grid grid-cols-1 gap-3 rounded-xl border border-rule bg-canvas/60 p-3 text-sm sm:grid-cols-2">
             <div>
               <p className="text-[10px] uppercase tracking-[0.14em] text-muted">Order</p>
               <p className="font-mono text-xs font-medium text-ink">{selectedOrder.order_no}</p>

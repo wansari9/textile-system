@@ -144,8 +144,13 @@ state renders consistently as text, a dot, a bar fill, a soft panel, or a border
   `sm`/`md`/`lg`.
 - **Toast** — transient confirmation in the bottom-right; one message, one icon.
 - **Table** — hairline header, hover row, right-aligned tabular numerics.
-- **Page** — every route starts with `page.shell` and a `page.header` containing
-  a title, a one-line subtitle and at most one date control.
+  The wrapper scrolls horizontally (`overflow-x-auto`); the table itself is
+  `w-full min-w-max` and cells are `whitespace-nowrap`, so wide reports scroll
+  instead of clipping figures. Missing values render as `—`.
+- **Page** — every route starts with `page.shell` (`w-full min-w-0`) and a
+  `page.header` containing a title, a one-line subtitle and at most one date
+  control. Tab strips scroll horizontally. Multi-column form grids collapse to
+  one column below `sm`.
 
 ---
 
@@ -183,16 +188,22 @@ how many units per hour are still needed.
 
 ### Admin CRUD pages
 Header with one primary action, then a single table in a card. Deactivation is a
-ghost action in the risk colour. Empty and loading states are distinct.
+ghost action in the risk colour. Empty and loading states are distinct. The Users
+page shows every assigned line in the table and uses an “Assigned Lines”
+checklist in the form, because one line manager can own several lines.
 
 ### Reports
-Tabs for Daily, Weekly, All Companies and Orders. Order and Gender are always
-visible columns on the Daily, Weekly and Orders tabs. A column header that can be
-sorted looks and behaves like a button and shows the current direction; sorting is
-server-side, so the page only sends the whitelisted key and direction. Sort state
-belongs to the tab and survives date changes. The Orders tab opens sorted by order
-number ascending, so the newest generated order numbers stay predictable; clicking
-Order # toggles the direction. CSV export stays available on every tab.
+Tabs for Daily, Weekly, Monthly, All Companies and Orders. Order and Gender are
+always visible columns on the Daily, Weekly, Monthly and Orders tabs. Monthly has
+its own month picker and aggregates produced, faults, monthly target and
+efficiency per line/order. A column header that can be sorted looks and behaves
+like a button and shows the current direction; sorting is server-side, so the
+page only sends the whitelisted key and direction. Sort state belongs to the tab
+and survives date changes. The Orders tab opens sorted by order number ascending,
+so the newest generated order numbers stay predictable; clicking Order # toggles
+the direction. CSV export stays available on every tab. Reports tolerate a legacy
+database: absent view columns come back as `NULL` and render as `—`, and dates are
+returned as plain text so a timezone cannot shift them.
 
 ### Order lifecycle
 1. **Create** on `/orders`: choose an existing customer or type a new one inline,
@@ -201,8 +212,9 @@ Order # toggles the direction. CSV export stays available on every tab.
 2. **Assign** on `/lines`: pick a sewing line and a daily target. The previous
    active assignment on that line is closed automatically; the order moves from
    `PENDING` to `ACTIVE`.
-3. **Enter hourly output** on `/entry` for the assigned sewing line; the line
-   manager sees only their own line, and admins can enter any line.
+3. **Enter hourly output** on `/entry` for one of the assigned sewing lines; the
+   line manager sees only their own lines (a manager may own several), and admins
+   can enter any line.
 4. **Record stages** on `/stages`: cutting per cutting line, ironing and packing
    per order, and quality in the embedded form.
 5. **Report** on `/reports`: the order appears in Daily/Weekly (once hourly data
@@ -211,8 +223,10 @@ Order # toggles the direction. CSV export stays available on every tab.
 
 ### Login
 Split screen: a dark brand panel stating what the system does, and a quiet form
-card. No marketing illustration. Failed logins show the server’s message; the
-role decides the landing page (`/` for admins, `/entry` for line managers).
+card. The password field has an eye toggle so the user can check what they typed;
+it flips between `password` and `text` and exposes `aria-pressed` for assistive
+technology. No marketing illustration. Failed logins show the server’s message;
+the role decides the landing page (`/` for admins, `/entry` for line managers).
 
 ---
 

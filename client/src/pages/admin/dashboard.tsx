@@ -12,6 +12,7 @@ import Skeleton from '../../components/ui/Skeleton';
 import { formatDateLong, toISODate } from '../../lib/date';
 import { chart, page, qualityTone, segmented, statusFor, table, toneFor, tones } from '../../design';
 import { GENDER_LABELS } from '../../domain';
+import { getAccentHex } from '../../lib/preferences';
 
 type DashboardTab = 'customers' | 'orders' | 'branches' | 'lines';
 
@@ -168,7 +169,7 @@ export default function Dashboard() {
 
   const renderCustomers = () => (
     <div className="overflow-x-auto">
-      <table className="w-full text-sm">
+      <table className="w-full min-w-max text-sm">
         <thead>
           <tr className={table.headRow}>
             <th className="px-5 py-3 font-medium">Customer</th>
@@ -215,7 +216,7 @@ export default function Dashboard() {
 
   const renderOrders = () => (
     <div className="overflow-x-auto">
-      <table className="w-full text-sm">
+      <table className="w-full min-w-max text-sm">
         <thead>
           <tr className={table.headRow}>
             <th className="px-5 py-3 font-medium">Order #</th>
@@ -272,7 +273,7 @@ export default function Dashboard() {
 
   const renderBranches = () => (
     <div className="overflow-x-auto">
-      <table className="w-full text-sm">
+      <table className="w-full min-w-max text-sm">
         <thead>
           <tr className={table.headRow}>
             <th className="px-5 py-3 font-medium">Branch</th>
@@ -331,7 +332,7 @@ export default function Dashboard() {
         </div>
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="w-full min-w-max text-sm">
           <thead>
             <tr className={table.headRow}>
               <th className="px-5 py-3 font-medium">Line</th>
@@ -524,7 +525,7 @@ export default function Dashboard() {
                     <XAxis dataKey="hour" hide />
                     <YAxis hide />
                     <Tooltip cursor={{ fill: chart.heroCursor }} {...chart.heroTooltip} />
-                    <Bar dataKey="produced" name="Units" fill={chart.heroBar} radius={chart.barRadius} />
+                    <Bar dataKey="produced" name="Units" fill={getAccentHex()} radius={chart.barRadius} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>

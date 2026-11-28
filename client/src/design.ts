@@ -61,6 +61,68 @@ export const shadows = {
 } as const;
 
 /* ------------------------------------------------------------------ */
+/* User preferences                                                   */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Runtime accent choices. Each preset supplies a light `base` (used as text on
+ * the dark ink surfaces), a pale `soft` background and a dark `deep` text
+ * colour for pale surfaces. Status colours stay semantic and never change.
+ */
+export const accents = {
+  lime: { label: 'Lime', base: colors.lime, soft: colors.limeSoft, deep: colors.limeDeep },
+  sky: { label: 'Sky', base: '#8FC7F0', soft: '#E8F4FD', deep: '#1C4F7A' },
+  violet: { label: 'Violet', base: '#C4B5F4', soft: '#F1EDFC', deep: '#4F3A8C' },
+  teal: { label: 'Teal', base: '#8FDCCF', soft: '#E6FAF5', deep: '#0E5B51' },
+  rose: { label: 'Rose', base: '#F2AFC2', soft: '#FCEBF0', deep: '#8A2340' },
+  amber: { label: 'Amber', base: '#F0C97E', soft: '#FDF4E3', deep: '#7A4D0B' },
+} as const;
+
+export type AccentId = keyof typeof accents;
+
+/** Root-font-size presets. 100% keeps the default 16px browser root. */
+export const fontSizes = {
+  compact: { label: 'Compact', scale: 93.75 },
+  default: { label: 'Default', scale: 100 },
+  large: { label: 'Large', scale: 112.5 },
+  xl: { label: 'Extra large', scale: 125 },
+} as const;
+
+export type FontSizeId = keyof typeof fontSizes;
+
+/** UI typefaces offered on the Settings page. Only the selected one is loaded. */
+export const uiFonts = {
+  geist: { label: 'Geist', stack: fonts.sans, href: null },
+  inter: {
+    label: 'Inter',
+    stack: "'Inter', system-ui, sans-serif",
+    href: 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap',
+  },
+  dmSans: {
+    label: 'DM Sans',
+    stack: "'DM Sans', system-ui, sans-serif",
+    href: 'https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&display=swap',
+  },
+  sourceSans: {
+    label: 'Source Sans 3',
+    stack: "'Source Sans 3', system-ui, sans-serif",
+    href: 'https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;500;600&display=swap',
+  },
+  plex: {
+    label: 'IBM Plex Sans',
+    stack: "'IBM Plex Sans', system-ui, sans-serif",
+    href: 'https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&display=swap',
+  },
+  system: {
+    label: 'System UI',
+    stack: "system-ui, -apple-system, 'Segoe UI', sans-serif",
+    href: null,
+  },
+} as const;
+
+export type FontId = keyof typeof uiFonts;
+
+/* ------------------------------------------------------------------ */
 /* Status rules                                                       */
 /* ------------------------------------------------------------------ */
 
@@ -307,32 +369,32 @@ export const toast = {
 
 export const table = {
   wrapper: 'overflow-x-auto',
-  base: 'w-full text-sm',
+  base: 'w-full min-w-max text-sm',
   head: 'border-b border-rule text-left text-[10px] uppercase tracking-[0.14em] text-muted',
   headRow: 'border-b border-rule bg-canvas/50 text-left text-[10px] uppercase tracking-[0.14em] text-muted',
-  headCell: 'pb-2 pr-4 font-medium',
-  headCellPadded: 'px-5 py-3 font-medium',
+  headCell: 'pb-2 pr-4 font-medium whitespace-nowrap',
+  headCellPadded: 'px-5 py-3 font-medium whitespace-nowrap',
   body: 'divide-y divide-rule',
   row: 'transition-colors hover:bg-paper/70',
   rowHover: 'transition-colors hover:bg-paper/70',
-  cell: 'py-3 pr-4',
-  cellPadded: 'px-5 py-3',
+  cell: 'py-3 pr-4 whitespace-nowrap',
+  cellPadded: 'px-5 py-3 whitespace-nowrap',
   empty: 'px-5 py-12 text-center text-sm text-muted',
-  numeric: 'text-right font-mono tabular-nums',
+  numeric: 'text-right font-mono tabular-nums whitespace-nowrap',
 } as const;
 
 export const page = {
-  shell: 'p-4 lg:p-6 space-y-6',
+  shell: 'w-full min-w-0 p-4 lg:p-6 space-y-6',
   header: 'flex flex-col sm:flex-row sm:items-center justify-between gap-3',
   title: 'text-2xl lg:text-3xl font-bold text-ink',
   subtitle: 'text-sm text-muted mt-1',
   dateInput:
     'px-3 py-2 border border-rule rounded-lg text-sm bg-paper text-ink ' +
     'focus:outline-none focus:ring-2 focus:ring-ink/10 focus:border-ink',
-  tabs: 'flex gap-1 border-b border-rule pb-1',
+  tabs: 'flex gap-1 overflow-x-auto border-b border-rule pb-1',
   tabActive: 'bg-surface-raised border border-rule border-b-paper text-ink -mb-px',
   tabIdle: 'text-muted hover:text-ink',
-  tab: 'px-4 py-2 text-sm font-medium rounded-t-lg transition-colors',
+  tab: 'shrink-0 whitespace-nowrap px-4 py-2 text-sm font-medium rounded-t-lg transition-colors',
 } as const;
 
 export const segmented = {
@@ -479,8 +541,8 @@ html {
 }
 
 body {
-  font-family: ${fonts.sans};
-  font-size: 14px;
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background-color: ${colors.canvas};
